@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import type { Player, CourtSlot, SubSlot } from './types';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
@@ -16,23 +16,19 @@ function generateId() {
 //   [3]  [4]  [5]   <- Back row (left, middle, right)
 //
 // Clockwise rotation path: 0 → 1 → 2 → 5 → 4 → 3 → 0
+// Counter-clockwise: 0 → 3 → 4 → 5 → 2 → 1 → 0
 //
-// LEFT sub rotation:
-//   - Sub enters at slot 0 (front left)
-//   - Player at slot 3 (back left) exits
-//
-// RIGHT sub rotation:
-//   - Sub enters at slot 5 (back right)
-//   - Player at slot 2 (front right) exits
+// LEFT sub: entry at 0 (front-left), exit at 3 (back-left)
+// RIGHT sub: entry at 5 (back-right), exit at 2 (front-right)
 
-// Clockwise rotation: where each slot moves TO
+// Clockwise (forward): where each slot moves TO
 const CLOCKWISE_NEXT: Record<number, number> = {
-  0: 1, // front-left → front-middle
-  1: 2, // front-middle → front-right
-  2: 5, // front-right → back-right
-  5: 4, // back-right → back-middle
-  4: 3, // back-middle → back-left
-  3: 0, // back-left → front-left
+  0: 1, 1: 2, 2: 5, 5: 4, 4: 3, 3: 0,
+};
+
+// Counter-clockwise (backward): where each slot moves TO
+const COUNTER_CLOCKWISE_NEXT: Record<number, number> = {
+  0: 3, 3: 4, 4: 5, 5: 2, 2: 1, 1: 0,
 };
 
 function App() {
@@ -55,9 +51,6 @@ function App() {
     side?: 'left' | 'right';
   } | null>(null);
 
-  // Track which side was used last to alternate between left and right subs
-  const lastSubSideRef = useRef<'left' | 'right'>('right'); // Start with right so first rotation uses left
-
   // Count girls currently on court
   const currentGirlsOnCourt = courtSlots.filter(
     (slot) => slot.player?.gender === 'female'
@@ -79,7 +72,6 @@ function App() {
         return prev.slice(0, count).map((slot, i) => ({ ...slot, slotIndex: i }));
       }
     });
-    // Adjust min girls if needed
     setMinGirls((prev) => Math.min(prev, count));
   }, []);
 
@@ -153,141 +145,144 @@ function App() {
     setEditingSlot(null);
   };
 
-  // Clockwise rotation logic that maintains minimum girls requirement
-  const handleRotate = () => {
+  // Rotation logic supporting both sides subbing in simultaneously
+  const handleRotate = (direction: 'forward' | 'backward') => {
     const currentPlayers = courtSlots.map((slot) => slot.player);
+    const rotationMap = direction === 'forward' ? CLOCKWISE_NEXT : COUNTER_CLOCKWISE_NEXT;
     
     // Find available subs on each side
     const leftSubAvailable = leftSubs.find((s) => s.player !== null);
     const rightSubAvailable = rightSubs.find((s) => s.player !== null);
     
-    // Determine which side to use - alternate between left and right
-    let subSide: 'left' | 'right' | null = null;
-    let subToUse: Player | null = null;
-    let subSourceIndex: number | null = null;
+    // LEFT sub: entry at 0, exit at 3
+    // RIGHT sub: entry at 5, exit at 2
+    const LEFT_ENTRY = 0, LEFT_EXIT = 3;
+    const RIGHT_ENTRY = 5, RIGHT_EXIT = 2;
     
-    // Prefer the opposite side from last time, but fall back if not available
-    const preferredSide = lastSubSideRef.current === 'left' ? 'right' : 'left';
+    // Determine which sides will sub based on availability
+    const leftWillSub = !!leftSubAvailable;
+    const rightWillSub = !!rightSubAvailable;
     
-    if (preferredSide === 'left' && leftSubAvailable) {
-      subSide = 'left';
-      subToUse = leftSubAvailable.player;
-      subSourceIndex = leftSubAvailable.slotIndex;
-    } else if (preferredSide === 'right' && rightSubAvailable) {
-      subSide = 'right';
-      subToUse = rightSubAvailable.player;
-      subSourceIndex = rightSubAvailable.slotIndex;
-    } else if (leftSubAvailable) {
-      // Fallback to left if right not available
-      subSide = 'left';
-      subToUse = leftSubAvailable.player;
-      subSourceIndex = leftSubAvailable.slotIndex;
-    } else if (rightSubAvailable) {
-      // Fallback to right if left not available
-      subSide = 'right';
-      subToUse = rightSubAvailable.player;
-      subSourceIndex = rightSubAvailable.slotIndex;
+    // Get players at exit positions
+    const leftExitPlayer = currentPlayers[LEFT_EXIT];
+    const rightExitPlayer = currentPlayers[RIGHT_EXIT];
+    
+    // Count girls that would remain after both potential exits
+    let girlsRemaining = 0;
+    for (let i = 0; i < 6; i++) {
+      if (leftWillSub && i === LEFT_EXIT) continue;
+      if (rightWillSub && i === RIGHT_EXIT) continue;
+      if (currentPlayers[i]?.gender === 'female') girlsRemaining++;
     }
     
-    // Update last used side
-    if (subSide) {
-      lastSubSideRef.current = subSide;
+    // Count girls coming in from subs
+    let girlsEntering = 0;
+    if (leftWillSub && leftSubAvailable?.player?.gender === 'female') girlsEntering++;
+    if (rightWillSub && rightSubAvailable?.player?.gender === 'female') girlsEntering++;
+    
+    // Check if rotation would violate min girls
+    const totalGirlsAfter = girlsRemaining + girlsEntering;
+    
+    // Determine which exits need to be blocked to maintain min girls
+    let blockLeftExit = false;
+    let blockRightExit = false;
+    
+    if (totalGirlsAfter < minGirls) {
+      // We need to block some exits - prioritize keeping girls on court
+      // Check if blocking left exit helps (if left exit is female)
+      if (leftWillSub && leftExitPlayer?.gender === 'female') {
+        const girlsIfBlockLeft = girlsRemaining + 1; // +1 for keeping left exit
+        if (girlsIfBlockLeft + girlsEntering >= minGirls) {
+          blockLeftExit = true;
+        }
+      }
+      
+      // Check if we still need to block right
+      const currentGirls = girlsRemaining + (blockLeftExit ? 1 : 0) + girlsEntering;
+      if (currentGirls < minGirls && rightWillSub && rightExitPlayer?.gender === 'female') {
+        blockRightExit = true;
+      }
     }
     
-    // Determine entry and exit slots based on sub side
-    // LEFT: entry at 0 (front-left), exit at 3 (back-left)
-    // RIGHT: entry at 5 (back-right), exit at 2 (front-right)
-    const entrySlot = subSide === 'left' ? 0 : subSide === 'right' ? 5 : null;
-    const exitSlot = subSide === 'left' ? 3 : subSide === 'right' ? 2 : null;
-    
-    // Get the player at exit position
-    const exitingPlayer = exitSlot !== null ? currentPlayers[exitSlot] : null;
-    
-    // Check if rotating out this player would violate min girls requirement
-    const girlsExcludingExit = currentPlayers.filter(
-      (p, i) => i !== exitSlot && p?.gender === 'female'
-    ).length;
-    
-    const wouldViolateMinGirls = 
-      exitingPlayer?.gender === 'female' && 
-      girlsExcludingExit < minGirls;
-    
-    // If we need a female sub but don't have one, check if girl must stay
-    const girlMustStay = wouldViolateMinGirls && 
-      (!subToUse || subToUse.gender !== 'female');
-    
-    // Create new player positions array
+    // Create new player positions
     const newPlayers: (Player | null)[] = new Array(6).fill(null);
     
-    if (girlMustStay && exitSlot !== null && entrySlot !== null) {
-      // The girl at exit position stays and moves to entry position
-      // Everyone else rotates normally, but no one exits and no sub enters
+    // Track which slots are entry points (for subs or blocked players)
+    const leftSubbing = leftWillSub && !blockLeftExit;
+    const rightSubbing = rightWillSub && !blockRightExit;
+    
+    // Apply rotation
+    for (let slot = 0; slot < 6; slot++) {
+      const player = currentPlayers[slot];
       
-      // Apply clockwise rotation for everyone except exit position
-      for (let slot = 0; slot < 6; slot++) {
-        if (slot === exitSlot) continue; // This player moves to entry slot instead
-        const nextSlot = CLOCKWISE_NEXT[slot];
-        // If the next slot is the entry slot, skip (girl is going there)
-        if (nextSlot === entrySlot) {
-          // This player would go to entry, but girl is taking that spot
-          // So this player goes to where the girl would have gone (next after exit)
-          const exitNextSlot = CLOCKWISE_NEXT[exitSlot];
-          newPlayers[exitNextSlot] = currentPlayers[slot];
+      // Handle left exit
+      if (slot === LEFT_EXIT) {
+        if (blockLeftExit) {
+          // Girl stays on court, moves to entry position
+          newPlayers[LEFT_ENTRY] = player;
+        } else if (leftSubbing) {
+          // Player exits (handled below)
+          continue;
         } else {
-          newPlayers[nextSlot] = currentPlayers[slot];
+          // No left sub, player rotates normally
+          newPlayers[rotationMap[slot]] = player;
         }
+        continue;
       }
       
-      // Girl at exit moves to entry slot
-      newPlayers[entrySlot] = exitingPlayer;
-      
-      // No sub enters, no one goes out
-      
-    } else if (subSide !== null && entrySlot !== null && exitSlot !== null) {
-      // Normal rotation with sub
-      
-      // Apply clockwise rotation
-      for (let slot = 0; slot < 6; slot++) {
-        if (slot === exitSlot) continue; // This player exits
-        
-        const nextSlot = CLOCKWISE_NEXT[slot];
-        
-        if (nextSlot === entrySlot) {
-          // This slot would move to entry, but sub is entering there
-          // So this player moves to where the exiting player was going (next after exit)
-          const exitNextSlot = CLOCKWISE_NEXT[exitSlot];
-          newPlayers[exitNextSlot] = currentPlayers[slot];
+      // Handle right exit
+      if (slot === RIGHT_EXIT) {
+        if (blockRightExit) {
+          // Girl stays on court, moves to entry position
+          newPlayers[RIGHT_ENTRY] = player;
+        } else if (rightSubbing) {
+          // Player exits (handled below)
+          continue;
         } else {
-          newPlayers[nextSlot] = currentPlayers[slot];
+          // No right sub, player rotates normally
+          newPlayers[rotationMap[slot]] = player;
         }
+        continue;
       }
       
-      // Sub enters at entry slot
-      newPlayers[entrySlot] = subToUse;
+      // Normal rotation for other slots
+      let nextSlot = rotationMap[slot];
       
-      // Move exiting player to sub's spot on bench
-      if (subSourceIndex !== null) {
-        if (subSide === 'left') {
-          setLeftSubs((prev) =>
-            prev.map((s, i) =>
-              i === subSourceIndex ? { ...s, player: exitingPlayer } : s
-            )
-          );
-        } else {
-          setRightSubs((prev) =>
-            prev.map((s, i) =>
-              i === subSourceIndex ? { ...s, player: exitingPlayer } : s
-            )
-          );
-        }
+      // If next slot is an entry point that's being used, adjust
+      if (nextSlot === LEFT_ENTRY && (leftSubbing || blockLeftExit)) {
+        // This player needs to go somewhere else
+        // They go to where the exit player would have gone
+        nextSlot = rotationMap[LEFT_EXIT];
+      }
+      if (nextSlot === RIGHT_ENTRY && (rightSubbing || blockRightExit)) {
+        nextSlot = rotationMap[RIGHT_EXIT];
       }
       
-    } else {
-      // No subs available - just rotate everyone clockwise
-      for (let slot = 0; slot < 6; slot++) {
-        const nextSlot = CLOCKWISE_NEXT[slot];
-        newPlayers[nextSlot] = currentPlayers[slot];
-      }
+      newPlayers[nextSlot] = player;
+    }
+    
+    // Place subs at entry positions
+    if (leftSubbing && leftSubAvailable) {
+      newPlayers[LEFT_ENTRY] = leftSubAvailable.player;
+    }
+    if (rightSubbing && rightSubAvailable) {
+      newPlayers[RIGHT_ENTRY] = rightSubAvailable.player;
+    }
+    
+    // Move exiting players to bench
+    if (leftSubbing && leftSubAvailable) {
+      setLeftSubs((prev) =>
+        prev.map((s, i) =>
+          i === leftSubAvailable.slotIndex ? { ...s, player: leftExitPlayer } : s
+        )
+      );
+    }
+    if (rightSubbing && rightSubAvailable) {
+      setRightSubs((prev) =>
+        prev.map((s, i) =>
+          i === rightSubAvailable.slotIndex ? { ...s, player: rightExitPlayer } : s
+        )
+      );
     }
     
     // Update court slots
