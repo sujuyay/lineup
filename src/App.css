@@ -241,7 +241,7 @@ body {
   justify-content: center;
   padding: 0.75rem;
   background: var(--bg-tertiary);
-  border: 2px dashed var(--text-muted);
+  border: 2px dotted var(--text-muted);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: 1.25rem;
