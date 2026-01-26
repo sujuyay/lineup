@@ -43,7 +43,7 @@ export function Controls({
             </div>
 
             <div className="control-group">
-                <label>Min Girls Required</label>
+                <label>Min Girls</label>
                 <div className="number-input">
                     <button 
                         onClick={() => onMinGirlsChange(Math.max(0, minGirls - 1))}
