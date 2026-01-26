@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import type { Player, CourtSlot, SubSlot } from './types';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
@@ -143,23 +143,83 @@ function App() {
   const isCourtFull = courtSlots.every((slot) => slot.player !== null);
 
   // Update court slots when player count changes
-  const handlePlayerCountChange = useCallback((count: number) => {
+  const handlePlayerCountChange = (count: number) => {
+    const oldCount = playerCount;
     setPlayerCount(count);
-    setCourtSlots((prev) => {
-      if (count > prev.length) {
-        return [
-          ...prev,
-          ...Array.from({ length: count - prev.length }, (_, i) => ({
-            player: null,
-            slotIndex: prev.length + i,
-          })),
-        ];
-      } else {
-        return prev.slice(0, count).map((slot, i) => ({ ...slot, slotIndex: i }));
+    
+    if (count > oldCount) {
+      // Increasing: fill new slots from subs (left top to bottom, then right top to bottom)
+      const newSlotCount = count - oldCount;
+      const leftFilledSubs = leftSubs.filter(s => s.player !== null);
+      const rightFilledSubs = rightSubs.filter(s => s.player !== null);
+      const availableSubs = [...leftFilledSubs, ...rightFilledSubs];
+      
+      const subsToMove = availableSubs.slice(0, newSlotCount);
+      const leftSubsToRemove = subsToMove.filter(s => s.side === 'left').length;
+      const rightSubsToRemove = subsToMove.filter(s => s.side === 'right').length;
+      
+      setCourtSlots((prev) => {
+        const newSlots = Array.from({ length: newSlotCount }, (_, i) => ({
+          player: subsToMove[i]?.player || null,
+          slotIndex: oldCount + i,
+        }));
+        return [...prev, ...newSlots];
+      });
+      
+      // Remove subs that moved to court
+      if (leftSubsToRemove > 0) {
+        setLeftSubs((prev) => {
+          const remaining = prev.map((s, i) => ({
+            ...s,
+            player: i < leftSubsToRemove ? null : s.player,
+          }));
+          return compactSubs(remaining);
+        });
       }
-    });
+      if (rightSubsToRemove > 0) {
+        setRightSubs((prev) => {
+          const remaining = prev.map((s, i) => ({
+            ...s,
+            player: i < rightSubsToRemove ? null : s.player,
+          }));
+          return compactSubs(remaining);
+        });
+      }
+    } else if (count < oldCount) {
+      // Decreasing: move displaced players to subs (left top to bottom, then right top to bottom)
+      const displacedPlayers = courtSlots.slice(count).map(s => s.player).filter((p): p is Player => p !== null);
+      
+      setCourtSlots((prev) => prev.slice(0, count).map((slot, i) => ({ ...slot, slotIndex: i })));
+      
+      // Add displaced players to sub benches
+      if (displacedPlayers.length > 0) {
+        const leftFilledCount = leftSubs.filter(s => s.player !== null).length;
+        const rightFilledCount = rightSubs.filter(s => s.player !== null).length;
+        const leftAvailable = 3 - leftFilledCount;
+        const rightAvailable = 3 - rightFilledCount;
+        
+        const toLeft = displacedPlayers.slice(0, leftAvailable);
+        const toRight = displacedPlayers.slice(leftAvailable, leftAvailable + rightAvailable);
+        
+        if (toLeft.length > 0) {
+          setLeftSubs((prev) => {
+            const filled = prev.filter(s => s.player !== null);
+            const newSubs = [...filled.map(s => s.player), ...toLeft];
+            return prev.map((s, i) => ({ ...s, player: newSubs[i] || null }));
+          });
+        }
+        if (toRight.length > 0) {
+          setRightSubs((prev) => {
+            const filled = prev.filter(s => s.player !== null);
+            const newSubs = [...filled.map(s => s.player), ...toRight];
+            return prev.map((s, i) => ({ ...s, player: newSubs[i] || null }));
+          });
+        }
+      }
+    }
+    
     setMinGirls((prev) => Math.min(prev, count));
-  }, []);
+  };
 
   const handleSlotClick = (slotIndex: number) => {
     setEditingSlot({ type: 'court', index: slotIndex });

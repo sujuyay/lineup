@@ -27,8 +27,8 @@ export function Controls({
                 <label>Players on Court</label>
                 <div className="number-input">
                     <button 
-                        onClick={() => onPlayerCountChange(Math.max(1, playerCount - 1))}
-                        disabled={playerCount <= 1}
+                        onClick={() => onPlayerCountChange(Math.max(2, playerCount - 1))}
+                        disabled={playerCount <= 2}
                     >
                         −
                     </button>
