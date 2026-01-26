@@ -778,13 +778,14 @@ body {
 
   /* Modal mobile */
   .modal-overlay {
-    padding: 0.5rem;
-    align-items: flex-end;
+    padding: 0.75rem;
+    align-items: flex-start;
+    padding-top: 2rem;
   }
 
   .modal-content {
     padding: 1.25rem;
-    border-radius: var(--radius) var(--radius) 0 0;
+    border-radius: var(--radius);
     max-height: 90vh;
     overflow-y: auto;
   }
