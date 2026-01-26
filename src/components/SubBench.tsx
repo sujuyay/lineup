@@ -16,7 +16,6 @@ export function SubBench({ subs, side, onSubClick }: SubBenchProps) {
           <PlayerSlot
             key={`${sub.side}-${sub.slotIndex}`}
             player={sub.player}
-            label={`Sub ${sub.slotIndex + 1}`}
             onClick={() => onSubClick(side, sub.slotIndex)}
             size="small"
           />

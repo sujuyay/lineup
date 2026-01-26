@@ -12,6 +12,10 @@ interface AddPlayerModalProps {
 
 const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'libero', 'middle_blocker'];
 
+function capitalizeWords(str: string): string {
+  return str.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer }: AddPlayerModalProps) {
   const [name, setName] = useState('');
   const [position, setPosition] = useState<Position | null>(null);
@@ -27,6 +31,10 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
   }, [isOpen, existingPlayer]);
 
   if (!isOpen) return null;
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(capitalizeWords(e.target.value));
+  };
 
   const handleSave = () => {
     if (!name.trim()) return;
@@ -55,7 +63,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
           <input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={handleNameChange}
             placeholder="Enter player name"
             autoFocus
           />
@@ -89,8 +97,6 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                 onClick={() => setPosition(position === pos ? null : pos)}
                 style={{
                   '--position-color': POSITION_COLORS[pos],
-                  backgroundColor: position === pos ? POSITION_COLORS[pos] : undefined,
-                  borderColor: POSITION_COLORS[pos],
                 } as React.CSSProperties}
               >
                 {POSITION_LABELS[pos]}

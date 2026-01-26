@@ -65,7 +65,6 @@ export function Court({ slots, onSlotClick }: CourtProps) {
             <PlayerSlot
               key={slot.slotIndex}
               player={slot.player}
-              label={`Position ${slot.slotIndex + 1}`}
               onClick={() => onSlotClick(slot.slotIndex)}
             />
           );

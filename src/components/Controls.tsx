@@ -17,15 +17,12 @@ export function Controls({
 }: ControlsProps) {
   return (
     <div className="controls">
-      <div className="rotate-buttons">
-        <button className="rotate-btn backward" onClick={() => onRotate('backward')}>
-          <span className="rotate-arrow">←</span>
-          <span>Rotate Back</span>
-        </button>
-        <button className="rotate-btn forward" onClick={() => onRotate('forward')}>
-          <span>Rotate Forward</span>
-          <span className="rotate-arrow">→</span>
-        </button>
+      <div className="control-group">
+        <label>Rotate</label>
+        <div className="rotate-input">
+          <button onClick={() => onRotate('backward')}>←</button>
+          <button onClick={() => onRotate('forward')}>→</button>
+        </div>
       </div>
 
       <div className="control-group">

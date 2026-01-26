@@ -192,15 +192,16 @@ body {
   word-break: break-word;
 }
 
-.player-gender {
-  font-size: 1.1rem;
-  opacity: 0.8;
+.slot-plus {
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  font-weight: 300;
+  opacity: 0.6;
 }
 
-.slot-label {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  text-align: center;
+.player-slot:hover .slot-plus {
+  color: var(--accent-primary);
+  opacity: 1;
 }
 
 /* ===== SUB BENCH ===== */
@@ -239,6 +240,9 @@ body {
   padding: 1.5rem;
   background: var(--bg-secondary);
   border-radius: var(--radius);
+  width: 100%;
+  max-width: 436px; /* Match court width (400px min + padding) */
+  margin: 0 auto;
 }
 
 .control-group {
@@ -311,49 +315,34 @@ body {
   color: var(--danger);
 }
 
-.rotate-buttons {
-  display: flex;
-  gap: 1rem;
-  width: 100%;
-  justify-content: center;
-}
-
-.rotate-btn {
+.rotate-input {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
   background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 2px solid var(--bg-tertiary);
   border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
+  padding: 0.25rem;
 }
 
-.rotate-btn:hover {
-  border-color: var(--accent-primary);
-  background: var(--bg-primary);
-}
-
-.rotate-btn.forward {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+.rotate-input button {
+  width: 48px;
+  height: 32px;
+  border: none;
+  background: var(--accent-primary);
   color: var(--bg-primary);
-  border-color: transparent;
-}
-
-.rotate-btn.forward:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.4);
-  border-color: transparent;
-}
-
-.rotate-arrow {
+  border-radius: 6px;
   font-size: 1.2rem;
   font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rotate-input button:hover {
+  background: var(--accent-secondary);
+  transform: translateY(-1px);
 }
 
 /* ===== MODAL ===== */
@@ -464,7 +453,7 @@ body {
 .position-btn {
   padding: 0.6rem 1rem;
   background: var(--bg-tertiary);
-  border: 2px solid var(--text-muted);
+  border: 2px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.85rem;
@@ -474,13 +463,13 @@ body {
 }
 
 .position-btn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  background: var(--bg-primary);
 }
 
 .position-btn.active {
-  color: white;
-  border-color: transparent;
+  border-color: var(--position-color);
+  background: color-mix(in srgb, var(--position-color) 15%, transparent);
+  color: var(--position-color);
 }
 
 /* Modal Actions */
