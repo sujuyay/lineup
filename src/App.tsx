@@ -10,28 +10,30 @@ function generateId() {
   return Math.random().toString(36).substring(2, 9);
 }
 
-// Volleyball court positions for 6 players:
-// Visual layout:
-//   Front row (near net): [slot 0 = pos 4] [slot 1 = pos 3] [slot 2 = pos 2]
-//   Back row:             [slot 3 = pos 5] [slot 4 = pos 6] [slot 5 = pos 1]
-// 
-// Clockwise rotation order: 1 → 2 → 3 → 4 → 5 → 6 → 1
-// In slot indices: 5 → 2 → 1 → 0 → 3 → 4 → 5
-// Position 1 (slot 5) is the serve position and rotates out
+// Volleyball court layout (6 players):
+//         NET
+//   [0]  [1]  [2]   <- Front row (left, middle, right)
+//   [3]  [4]  [5]   <- Back row (left, middle, right)
+//
+// Clockwise rotation path: 0 → 1 → 2 → 5 → 4 → 3 → 0
+//
+// LEFT sub rotation:
+//   - Sub enters at slot 0 (front left)
+//   - Player at slot 3 (back left) exits
+//
+// RIGHT sub rotation:
+//   - Sub enters at slot 5 (back right)
+//   - Player at slot 2 (front right) exits
 
-// Maps slot index to the next slot in clockwise rotation
-const CLOCKWISE_ROTATION: Record<number, number> = {
-  5: -1, // Position 1 rotates out
-  2: 5,  // Position 2 → Position 1
-  1: 2,  // Position 3 → Position 2
-  0: 1,  // Position 4 → Position 3
-  3: 0,  // Position 5 → Position 4
-  4: 3,  // Position 6 → Position 5
+// Clockwise rotation: where each slot moves TO
+const CLOCKWISE_NEXT: Record<number, number> = {
+  0: 1, // front-left → front-middle
+  1: 2, // front-middle → front-right
+  2: 5, // front-right → back-right
+  5: 4, // back-right → back-middle
+  4: 3, // back-middle → back-left
+  3: 0, // back-left → front-left
 };
-
-// Position 6 (slot 4) is where subs enter
-const SUB_ENTRY_SLOT = 4;
-const SERVE_SLOT = 5; // Position 1 - where players rotate out
 
 function App() {
   const [playerCount, setPlayerCount] = useState(6);
@@ -150,129 +152,120 @@ function App() {
 
   // Clockwise rotation logic that maintains minimum girls requirement
   const handleRotate = () => {
-    // Get current players indexed by slot
     const currentPlayers = courtSlots.map((slot) => slot.player);
     
-    // Find available subs
-    const allSubs = [...leftSubs, ...rightSubs].filter((s) => s.player !== null);
+    // Find available sub - check left first, then right
+    const leftSubAvailable = leftSubs.find((s) => s.player !== null);
+    const rightSubAvailable = rightSubs.find((s) => s.player !== null);
     
-    // Get the player at position 1 (serve position, slot 5) who would normally rotate out
-    const playerAtServePosition = currentPlayers[SERVE_SLOT];
-    
-    // Count girls on court excluding the player at serve position
-    const girlsExcludingServe = currentPlayers.filter(
-      (p, i) => i !== SERVE_SLOT && p?.gender === 'female'
-    ).length;
-    
-    // Check if rotating out the serve position player would violate min girls requirement
-    const wouldViolateMinGirls = 
-      playerAtServePosition?.gender === 'female' && 
-      girlsExcludingServe < minGirls;
-    
-    // Find sub to bring in
+    // Determine which side the sub comes from (left priority)
+    let subSide: 'left' | 'right' | null = null;
     let subToUse: Player | null = null;
-    let subSource: { side: 'left' | 'right'; index: number } | null = null;
+    let subSourceIndex: number | null = null;
     
-    if (allSubs.length > 0) {
-      // If we need a female, try to find one
-      if (wouldViolateMinGirls) {
-        const femaleSub = allSubs.find((s) => s.player?.gender === 'female');
-        if (femaleSub) {
-          subToUse = femaleSub.player;
-          subSource = { side: femaleSub.side, index: femaleSub.slotIndex };
-        }
-      }
-      
-      // If we don't need female specifically, or couldn't find one, use first available
-      if (!subToUse) {
-        subToUse = allSubs[0].player;
-        subSource = { side: allSubs[0].side, index: allSubs[0].slotIndex };
-      }
+    if (leftSubAvailable) {
+      subSide = 'left';
+      subToUse = leftSubAvailable.player;
+      subSourceIndex = leftSubAvailable.slotIndex;
+    } else if (rightSubAvailable) {
+      subSide = 'right';
+      subToUse = rightSubAvailable.player;
+      subSourceIndex = rightSubAvailable.slotIndex;
     }
     
-    // Determine if girl at serve position should stay on court
+    // Determine entry and exit slots based on sub side
+    // LEFT: entry at 0 (front-left), exit at 3 (back-left)
+    // RIGHT: entry at 5 (back-right), exit at 2 (front-right)
+    const entrySlot = subSide === 'left' ? 0 : subSide === 'right' ? 5 : null;
+    const exitSlot = subSide === 'left' ? 3 : subSide === 'right' ? 2 : null;
+    
+    // Get the player at exit position
+    const exitingPlayer = exitSlot !== null ? currentPlayers[exitSlot] : null;
+    
+    // Check if rotating out this player would violate min girls requirement
+    const girlsExcludingExit = currentPlayers.filter(
+      (p, i) => i !== exitSlot && p?.gender === 'female'
+    ).length;
+    
+    const wouldViolateMinGirls = 
+      exitingPlayer?.gender === 'female' && 
+      girlsExcludingExit < minGirls;
+    
+    // If we need a female sub but don't have one, check if girl must stay
     const girlMustStay = wouldViolateMinGirls && 
       (!subToUse || subToUse.gender !== 'female');
     
     // Create new player positions array
     const newPlayers: (Player | null)[] = new Array(6).fill(null);
     
-    if (girlMustStay) {
-      // The girl at serve position stays and moves to position 6 (sub entry slot)
-      // Everyone else rotates normally, but no one exits
+    if (girlMustStay && exitSlot !== null && entrySlot !== null) {
+      // The girl at exit position stays and moves to entry position
+      // Everyone else rotates normally, but no one exits and no sub enters
       
-      // Move the girl from serve position to sub entry position
-      newPlayers[SUB_ENTRY_SLOT] = playerAtServePosition;
-      
-      // Rotate everyone else clockwise (except serve and sub entry positions)
+      // Apply clockwise rotation for everyone except exit position
       for (let slot = 0; slot < 6; slot++) {
-        if (slot === SERVE_SLOT) continue; // This player is moving to SUB_ENTRY_SLOT
-        if (slot === SUB_ENTRY_SLOT) continue; // Already handled
-        
-        const nextSlot = CLOCKWISE_ROTATION[slot];
-        if (nextSlot === -1) continue; // Would rotate out
-        
-        newPlayers[nextSlot] = currentPlayers[slot];
-      }
-      
-      // The player that was at position 6 (sub entry slot) moves to position 5 (next in rotation)
-      const playerAtSubEntry = currentPlayers[SUB_ENTRY_SLOT];
-      newPlayers[3] = playerAtSubEntry; // Position 6 → Position 5 (slot 4 → slot 3)
-      
-      // No sub comes in, no one goes out
-      // Sub stays where they are
-      
-    } else {
-      // Normal clockwise rotation
-      let outgoingPlayer: Player | null = null;
-      
-      // Apply clockwise rotation
-      for (let slot = 0; slot < 6; slot++) {
-        const nextSlot = CLOCKWISE_ROTATION[slot];
-        if (nextSlot === -1) {
-          // This player rotates out
-          outgoingPlayer = currentPlayers[slot];
+        if (slot === exitSlot) continue; // This player moves to entry slot instead
+        const nextSlot = CLOCKWISE_NEXT[slot];
+        // If the next slot is the entry slot, skip (girl is going there)
+        if (nextSlot === entrySlot) {
+          // This player would go to entry, but girl is taking that spot
+          // So this player goes to where the girl would have gone (next after exit)
+          const exitNextSlot = CLOCKWISE_NEXT[exitSlot];
+          newPlayers[exitNextSlot] = currentPlayers[slot];
         } else {
           newPlayers[nextSlot] = currentPlayers[slot];
         }
       }
       
-      // Sub enters at position 6 (slot 4)
-      newPlayers[SUB_ENTRY_SLOT] = subToUse;
+      // Girl at exit moves to entry slot
+      newPlayers[entrySlot] = exitingPlayer;
       
-      // Move outgoing player to sub bench
-      if (subSource) {
-        if (subSource.side === 'left') {
+      // No sub enters, no one goes out
+      
+    } else if (subSide !== null && entrySlot !== null && exitSlot !== null) {
+      // Normal rotation with sub
+      
+      // Apply clockwise rotation
+      for (let slot = 0; slot < 6; slot++) {
+        if (slot === exitSlot) continue; // This player exits
+        
+        const nextSlot = CLOCKWISE_NEXT[slot];
+        
+        if (nextSlot === entrySlot) {
+          // This slot would move to entry, but sub is entering there
+          // So this player moves to where the exiting player was going (next after exit)
+          const exitNextSlot = CLOCKWISE_NEXT[exitSlot];
+          newPlayers[exitNextSlot] = currentPlayers[slot];
+        } else {
+          newPlayers[nextSlot] = currentPlayers[slot];
+        }
+      }
+      
+      // Sub enters at entry slot
+      newPlayers[entrySlot] = subToUse;
+      
+      // Move exiting player to sub's spot on bench
+      if (subSourceIndex !== null) {
+        if (subSide === 'left') {
           setLeftSubs((prev) =>
             prev.map((s, i) =>
-              i === subSource!.index ? { ...s, player: outgoingPlayer } : s
+              i === subSourceIndex ? { ...s, player: exitingPlayer } : s
             )
           );
         } else {
           setRightSubs((prev) =>
             prev.map((s, i) =>
-              i === subSource!.index ? { ...s, player: outgoingPlayer } : s
+              i === subSourceIndex ? { ...s, player: exitingPlayer } : s
             )
           );
         }
-      } else if (outgoingPlayer) {
-        // No sub was used, find an empty sub spot
-        const emptyLeftSub = leftSubs.findIndex((s) => !s.player);
-        const emptyRightSub = rightSubs.findIndex((s) => !s.player);
-        
-        if (emptyLeftSub !== -1) {
-          setLeftSubs((prev) =>
-            prev.map((s, i) =>
-              i === emptyLeftSub ? { ...s, player: outgoingPlayer } : s
-            )
-          );
-        } else if (emptyRightSub !== -1) {
-          setRightSubs((prev) =>
-            prev.map((s, i) =>
-              i === emptyRightSub ? { ...s, player: outgoingPlayer } : s
-            )
-          );
-        }
+      }
+      
+    } else {
+      // No subs available - just rotate everyone clockwise
+      for (let slot = 0; slot < 6; slot++) {
+        const nextSlot = CLOCKWISE_NEXT[slot];
+        newPlayers[nextSlot] = currentPlayers[slot];
       }
     }
     
