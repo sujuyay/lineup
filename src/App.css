@@ -3,8 +3,8 @@
   --bg-primary: #0f1419;
   --bg-secondary: #1a1f2e;
   --bg-tertiary: #252d3d;
-  --court-bg: #1e2a28;
-  --court-lines: #2d3d39;
+  --court-bg: #162322;
+  --court-lines: #1e3a36;
   --text-primary: #f0f4f8;
   --text-secondary: #8899a6;
   --text-muted: #657786;
@@ -85,7 +85,7 @@ body {
 
 /* ===== COURT ===== */
 .court {
-  background: linear-gradient(180deg, var(--court-bg) 0%, #1a2624 100%);
+  background: linear-gradient(180deg, var(--court-bg) 0%, #121e1c 100%);
   border-radius: var(--radius);
   padding: 1.5rem;
   position: relative;
@@ -329,7 +329,8 @@ body {
 .rotate-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  width: 85px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
   padding: 0.25rem;
