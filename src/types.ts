@@ -36,3 +36,11 @@ export const POSITION_LABELS: Record<Position, string> = {
   middle_blocker: 'Middle Blocker',
 };
 
+export const POSITION_ABBREV: Record<Position, string> = {
+  setter: 'S',
+  outside_hitter: 'OH',
+  opposite_hitter: 'OP',
+  libero: 'L',
+  middle_blocker: 'MB',
+};
+

@@ -174,10 +174,6 @@ body {
   font-size: 0.8rem;
 }
 
-.player-slot.small .player-gender {
-  font-size: 0.9rem;
-}
-
 .player-position-badge {
   font-size: 0.65rem;
   padding: 0.2rem 0.5rem;

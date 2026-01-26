@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Player, CourtSlot, SubSlot } from './types';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
@@ -54,6 +54,9 @@ function App() {
     index: number;
     side?: 'left' | 'right';
   } | null>(null);
+
+  // Track which side was used last to alternate between left and right subs
+  const lastSubSideRef = useRef<'left' | 'right'>('right'); // Start with right so first rotation uses left
 
   // Count girls currently on court
   const currentGirlsOnCourt = courtSlots.filter(
@@ -154,23 +157,41 @@ function App() {
   const handleRotate = () => {
     const currentPlayers = courtSlots.map((slot) => slot.player);
     
-    // Find available sub - check left first, then right
+    // Find available subs on each side
     const leftSubAvailable = leftSubs.find((s) => s.player !== null);
     const rightSubAvailable = rightSubs.find((s) => s.player !== null);
     
-    // Determine which side the sub comes from (left priority)
+    // Determine which side to use - alternate between left and right
     let subSide: 'left' | 'right' | null = null;
     let subToUse: Player | null = null;
     let subSourceIndex: number | null = null;
     
-    if (leftSubAvailable) {
+    // Prefer the opposite side from last time, but fall back if not available
+    const preferredSide = lastSubSideRef.current === 'left' ? 'right' : 'left';
+    
+    if (preferredSide === 'left' && leftSubAvailable) {
+      subSide = 'left';
+      subToUse = leftSubAvailable.player;
+      subSourceIndex = leftSubAvailable.slotIndex;
+    } else if (preferredSide === 'right' && rightSubAvailable) {
+      subSide = 'right';
+      subToUse = rightSubAvailable.player;
+      subSourceIndex = rightSubAvailable.slotIndex;
+    } else if (leftSubAvailable) {
+      // Fallback to left if right not available
       subSide = 'left';
       subToUse = leftSubAvailable.player;
       subSourceIndex = leftSubAvailable.slotIndex;
     } else if (rightSubAvailable) {
+      // Fallback to right if left not available
       subSide = 'right';
       subToUse = rightSubAvailable.player;
       subSourceIndex = rightSubAvailable.slotIndex;
+    }
+    
+    // Update last used side
+    if (subSide) {
+      lastSubSideRef.current = subSide;
     }
     
     // Determine entry and exit slots based on sub side

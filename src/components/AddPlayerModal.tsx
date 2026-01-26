@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Player, Position, Gender } from '../types';
 import { POSITION_COLORS, POSITION_LABELS } from '../types';
 
@@ -13,25 +13,36 @@ interface AddPlayerModalProps {
 const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'libero', 'middle_blocker'];
 
 export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer }: AddPlayerModalProps) {
-  const [name, setName] = useState(existingPlayer?.name || '');
-  const [position, setPosition] = useState<Position | null>(existingPlayer?.position || null);
-  const [gender, setGender] = useState<Gender>(existingPlayer?.gender || 'male');
+  const [name, setName] = useState('');
+  const [position, setPosition] = useState<Position | null>(null);
+  const [gender, setGender] = useState<Gender>('male');
+
+  // Sync state with existingPlayer when modal opens or player changes
+  useEffect(() => {
+    if (isOpen) {
+      setName(existingPlayer?.name || '');
+      setPosition(existingPlayer?.position || null);
+      setGender(existingPlayer?.gender || 'male');
+    }
+  }, [isOpen, existingPlayer]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
     if (!name.trim()) return;
     onSave({ name: name.trim(), position, gender });
-    setName('');
-    setPosition(null);
-    setGender('male');
+    resetForm();
   };
 
   const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const resetForm = () => {
     setName('');
     setPosition(null);
     setGender('male');
-    onClose();
   };
 
   return (
@@ -107,4 +118,3 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
     </div>
   );
 }
-
