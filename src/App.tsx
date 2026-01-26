@@ -10,26 +10,105 @@ function generateId() {
   return Math.random().toString(36).substring(2, 9);
 }
 
-// Volleyball court layout (6 players):
-//         NET
-//   [0]  [1]  [2]   <- Front row (left, middle, right)
-//   [3]  [4]  [5]   <- Back row (left, middle, right)
-//
-// Clockwise rotation path: 0 → 1 → 2 → 5 → 4 → 3 → 0
-// Counter-clockwise: 0 → 3 → 4 → 5 → 2 → 1 → 0
-//
-// LEFT sub: entry at 0 (front-left), exit at 3 (back-left)
-// RIGHT sub: entry at 5 (back-right), exit at 2 (front-right)
+// Get grid layout based on player count (matches Court.tsx)
+function getGridLayout(playerCount: number) {
+  if (playerCount <= 3) {
+    return { rows: 1, cols: playerCount };
+  } else if (playerCount === 4) {
+    return { rows: 2, cols: 2 };
+  } else if (playerCount <= 6) {
+    return { rows: 2, cols: 3 };
+  }
+  return { rows: 2, cols: 3 }; // Default for safety
+}
 
-// Clockwise (forward): where each slot moves TO
-const CLOCKWISE_NEXT: Record<number, number> = {
-  0: 1, 1: 2, 2: 5, 5: 4, 4: 3, 3: 0,
-};
+// Generate clockwise rotation path for any grid layout
+// Clockwise: top row L→R, then down right side, bottom row R→L, then up left side
+function generateClockwiseRotation(playerCount: number): Record<number, number> {
+  if (playerCount <= 1) return { 0: 0 };
+  
+  const { rows, cols } = getGridLayout(playerCount);
+  const path: number[] = [];
+  
+  if (rows === 1) {
+    // Single row: just go left to right, wrap around
+    for (let i = 0; i < playerCount; i++) path.push(i);
+  } else {
+    // Multi-row: perimeter clockwise
+    // Top row (left to right)
+    for (let c = 0; c < cols; c++) path.push(c);
+    // Right side going down (skip top-right, already added)
+    for (let r = 1; r < rows; r++) {
+      const idx = r * cols + (cols - 1);
+      if (idx < playerCount) path.push(idx);
+    }
+    // Bottom row (right to left, skip bottom-right, already added)
+    for (let c = cols - 2; c >= 0; c--) {
+      const idx = (rows - 1) * cols + c;
+      if (idx < playerCount) path.push(idx);
+    }
+    // Left side going up (skip bottom-left and top-left, already added)
+    for (let r = rows - 2; r >= 1; r--) {
+      const idx = r * cols;
+      if (idx < playerCount) path.push(idx);
+    }
+  }
+  
+  // Remove duplicates while maintaining order
+  const uniquePath = [...new Set(path)];
+  
+  // Create rotation map: each slot maps to the next slot in path
+  const rotationMap: Record<number, number> = {};
+  for (let i = 0; i < uniquePath.length; i++) {
+    const current = uniquePath[i];
+    const next = uniquePath[(i + 1) % uniquePath.length];
+    rotationMap[current] = next;
+  }
+  
+  return rotationMap;
+}
 
-// Counter-clockwise (backward): where each slot moves TO
-const COUNTER_CLOCKWISE_NEXT: Record<number, number> = {
-  0: 3, 3: 4, 4: 5, 5: 2, 2: 1, 1: 0,
-};
+// Generate counter-clockwise rotation (reverse of clockwise)
+function generateCounterClockwiseRotation(playerCount: number): Record<number, number> {
+  const clockwise = generateClockwiseRotation(playerCount);
+  const counterClockwise: Record<number, number> = {};
+  
+  // Reverse the mapping
+  for (const [from, to] of Object.entries(clockwise)) {
+    counterClockwise[Number(to)] = Number(from);
+  }
+  
+  return counterClockwise;
+}
+
+// Get entry/exit positions for subs based on player count and direction
+function getSubPositions(playerCount: number, direction: 'forward' | 'backward') {
+  const { rows, cols } = getGridLayout(playerCount);
+  
+  // LEFT sub positions: front-left (0) and back-left (first slot of last row)
+  const frontLeft = 0;
+  const backLeft = (rows - 1) * cols;
+  
+  // RIGHT sub positions: front-right (last of first row) and back-right (last slot)
+  const frontRight = cols - 1;
+  const backRight = Math.min((rows - 1) * cols + (cols - 1), playerCount - 1);
+  
+  if (direction === 'forward') {
+    return {
+      LEFT_ENTRY: frontLeft,
+      LEFT_EXIT: backLeft < playerCount ? backLeft : frontLeft,
+      RIGHT_ENTRY: backRight,
+      RIGHT_EXIT: frontRight,
+    };
+  } else {
+    return {
+      LEFT_ENTRY: backLeft < playerCount ? backLeft : frontLeft,
+      LEFT_EXIT: frontLeft,
+      RIGHT_ENTRY: frontRight,
+      RIGHT_EXIT: backRight,
+    };
+  }
+}
 
 // Helper to compact subs (remove gaps)
 function compactSubs(subs: SubSlot[]): SubSlot[] {
@@ -200,7 +279,12 @@ function App() {
   // Rotation logic supporting both sides subbing in simultaneously
   const handleRotate = (direction: 'forward' | 'backward') => {
     const currentPlayers = courtSlots.map((slot) => slot.player);
-    const rotationMap = direction === 'forward' ? CLOCKWISE_NEXT : COUNTER_CLOCKWISE_NEXT;
+    const rotationMap = direction === 'forward' 
+      ? generateClockwiseRotation(playerCount) 
+      : generateCounterClockwiseRotation(playerCount);
+    
+    // Get dynamic entry/exit positions based on player count
+    const { LEFT_ENTRY, LEFT_EXIT, RIGHT_ENTRY, RIGHT_EXIT } = getSubPositions(playerCount, direction);
     
     // Get filled subs on each side
     const leftFilledSubs = leftSubs.filter((s) => s.player !== null);
@@ -219,12 +303,6 @@ function App() {
       ? (direction === 'forward' ? rightFilledSubs[rightFilledSubs.length - 1] : rightFilledSubs[0])
       : null;
     
-    // Entry/exit positions depend on rotation direction
-    const LEFT_ENTRY = direction === 'forward' ? 0 : 3;
-    const LEFT_EXIT = direction === 'forward' ? 3 : 0;
-    const RIGHT_ENTRY = direction === 'forward' ? 5 : 2;
-    const RIGHT_EXIT = direction === 'forward' ? 2 : 5;
-    
     // Determine which sides will sub based on availability
     const leftWillSub = !!leftSubEntering;
     const rightWillSub = !!rightSubEntering;
@@ -235,7 +313,7 @@ function App() {
     
     // Count girls that would remain after both potential exits
     let girlsRemaining = 0;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < playerCount; i++) {
       if (leftWillSub && i === LEFT_EXIT) continue;
       if (rightWillSub && i === RIGHT_EXIT) continue;
       if (currentPlayers[i]?.gender === 'female') girlsRemaining++;
@@ -268,13 +346,13 @@ function App() {
     }
     
     // Create new player positions
-    const newPlayers: (Player | null)[] = new Array(6).fill(null);
+    const newPlayers: (Player | null)[] = new Array(playerCount).fill(null);
     
     const leftSubbing = leftWillSub && !blockLeftExit;
     const rightSubbing = rightWillSub && !blockRightExit;
     
     // Apply rotation
-    for (let slot = 0; slot < 6; slot++) {
+    for (let slot = 0; slot < playerCount; slot++) {
       const player = currentPlayers[slot];
       
       if (slot === LEFT_EXIT) {
