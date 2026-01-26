@@ -186,10 +186,30 @@ function App() {
         });
       }
     } else if (count < oldCount) {
-      // Decreasing: move displaced players to subs (left top to bottom, then right top to bottom)
-      const displacedPlayers = courtSlots.slice(count).map(s => s.player).filter((p): p is Player => p !== null);
+      // Decreasing: prioritize displacing men over women
+      // Sort players: women first (keep), men last (displace)
+      const allPlayers = courtSlots
+        .map((s, i) => ({ player: s.player, originalIndex: i }))
+        .filter((s): s is { player: Player; originalIndex: number } => s.player !== null);
       
-      setCourtSlots((prev) => prev.slice(0, count).map((slot, i) => ({ ...slot, slotIndex: i })));
+      // Sort: females first, males last
+      allPlayers.sort((a, b) => {
+        if (a.player.gender === 'female' && b.player.gender === 'male') return -1;
+        if (a.player.gender === 'male' && b.player.gender === 'female') return 1;
+        return a.originalIndex - b.originalIndex; // Maintain order within same gender
+      });
+      
+      const playersToKeep = allPlayers.slice(0, count).map(s => s.player);
+      const displacedPlayers = allPlayers.slice(count).map(s => s.player);
+      
+      // Rebuild court with kept players in first `count` slots
+      setCourtSlots((prev) => 
+        prev.slice(0, count).map((slot, i) => ({ 
+          ...slot, 
+          slotIndex: i,
+          player: playersToKeep[i] || null,
+        }))
+      );
       
       // Add displaced players to sub benches
       if (displacedPlayers.length > 0) {
