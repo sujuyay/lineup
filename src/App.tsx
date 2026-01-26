@@ -276,27 +276,44 @@ function App() {
       newPlayers[RIGHT_ENTRY] = rightSubEntering.player;
     }
     
-    // Update left subs: shift everyone up (remove top, add exiting player at bottom)
-    if (leftSubbing) {
+    // Update left subs: top player (index 0) enters, exiting player goes to bottom
+    // Example: [A, B, null] -> A enters, X exits -> [B, X, null]
+    if (leftSubbing && leftSubEntering && leftExitPlayer) {
       setLeftSubs((prev) => {
-        const newSubs = [...prev];
-        // Shift up: remove the one that entered (index 0)
-        const players = prev.map((s) => s.player).filter((_, i) => i !== 0);
-        // Add exiting player at the end
-        players.push(leftExitPlayer);
-        return newSubs.map((s, i) => ({ ...s, player: players[i] || null }));
+        const players = prev.map((s) => s.player);
+        
+        // Remove the player that entered (first filled one) and add exiting player
+        const newPlayers: Player[] = [];
+        let skippedFirst = false;
+        for (const p of players) {
+          if (p !== null) {
+            if (!skippedFirst) {
+              skippedFirst = true; // Skip the first one (it entered the court)
+              continue;
+            }
+            newPlayers.push(p);
+          }
+        }
+        newPlayers.push(leftExitPlayer); // Add exiting player at the end
+        
+        // Should still have same count
+        return prev.map((s, i) => ({ ...s, player: newPlayers[i] || null }));
       });
     }
     
-    // Update right subs: shift everyone down (remove bottom, add exiting player at top)
-    if (rightSubbing && rightSubEntering) {
+    // Update right subs: bottom player (last filled) enters, exiting player goes to top
+    // Example: [A, B, C] -> C enters, X exits -> [X, A, B]
+    if (rightSubbing && rightSubEntering && rightExitPlayer) {
       setRightSubs((prev) => {
-        const newSubs = [...prev];
-        // Get current players, remove the one that entered (last filled)
-        const players = prev.map((s) => s.player).filter((p) => p !== rightSubEntering.player);
-        // Add exiting player at the beginning
-        players.unshift(rightExitPlayer);
-        return newSubs.map((s, i) => ({ ...s, player: players[i] || null }));
+        const players = prev.map((s) => s.player);
+        
+        // Remove the player that entered (last filled one) and add exiting player at start
+        const filledPlayers = players.filter((p) => p !== null);
+        filledPlayers.pop(); // Remove last (the one that entered)
+        const newPlayers: Player[] = [rightExitPlayer, ...filledPlayers];
+        
+        // Should still have same count
+        return prev.map((s, i) => ({ ...s, player: newPlayers[i] || null }));
       });
     }
     
