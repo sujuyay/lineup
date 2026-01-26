@@ -145,11 +145,43 @@ function App() {
     if (!editingSlot) return;
 
     if (editingSlot.type === 'court') {
-      setCourtSlots((prev) =>
-        prev.map((slot, i) =>
-          i === editingSlot.index ? { ...slot, player: null } : slot
-        )
-      );
+      // Find a replacement sub: left side first (top to bottom), then right side (top to bottom)
+      const leftFilledSub = leftSubs.find((s) => s.player !== null);
+      const rightFilledSub = rightSubs.find((s) => s.player !== null);
+      const replacementSub = leftFilledSub || rightFilledSub;
+      
+      if (replacementSub) {
+        // Replace court player with sub
+        setCourtSlots((prev) =>
+          prev.map((slot, i) =>
+            i === editingSlot.index ? { ...slot, player: replacementSub.player } : slot
+          )
+        );
+        
+        // Remove sub from bench and compact
+        if (leftFilledSub) {
+          setLeftSubs((prev) => {
+            const updated = prev.map((slot, i) =>
+              i === leftFilledSub.slotIndex ? { ...slot, player: null } : slot
+            );
+            return compactSubs(updated);
+          });
+        } else {
+          setRightSubs((prev) => {
+            const updated = prev.map((slot, i) =>
+              i === rightFilledSub!.slotIndex ? { ...slot, player: null } : slot
+            );
+            return compactSubs(updated);
+          });
+        }
+      } else {
+        // No subs available, just remove the player
+        setCourtSlots((prev) =>
+          prev.map((slot, i) =>
+            i === editingSlot.index ? { ...slot, player: null } : slot
+          )
+        );
+      }
     } else if (editingSlot.type === 'sub') {
       const setSubs = editingSlot.side === 'left' ? setLeftSubs : setRightSubs;
       setSubs((prev) => {
