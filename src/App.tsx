@@ -154,10 +154,17 @@ function App() {
     const leftSubAvailable = leftSubs.find((s) => s.player !== null);
     const rightSubAvailable = rightSubs.find((s) => s.player !== null);
     
-    // LEFT sub: entry at 0, exit at 3
-    // RIGHT sub: entry at 5, exit at 2
-    const LEFT_ENTRY = 0, LEFT_EXIT = 3;
-    const RIGHT_ENTRY = 5, RIGHT_EXIT = 2;
+    // Entry/exit positions depend on rotation direction
+    // Forward (clockwise):
+    //   LEFT sub: entry at 0 (front-left), exit at 3 (back-left)
+    //   RIGHT sub: entry at 5 (back-right), exit at 2 (front-right)
+    // Backward (counter-clockwise):
+    //   LEFT sub: entry at 3 (back-left), exit at 0 (front-left)
+    //   RIGHT sub: entry at 2 (front-right), exit at 5 (back-right)
+    const LEFT_ENTRY = direction === 'forward' ? 0 : 3;
+    const LEFT_EXIT = direction === 'forward' ? 3 : 0;
+    const RIGHT_ENTRY = direction === 'forward' ? 5 : 2;
+    const RIGHT_EXIT = direction === 'forward' ? 2 : 5;
     
     // Determine which sides will sub based on availability
     const leftWillSub = !!leftSubAvailable;

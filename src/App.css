@@ -325,7 +325,7 @@ body {
 }
 
 .rotate-input button {
-  width: 48px;
+  width: 32px;
   height: 32px;
   border: none;
   background: var(--accent-primary);
@@ -342,7 +342,6 @@ body {
 
 .rotate-input button:hover {
   background: var(--accent-secondary);
-  transform: translateY(-1px);
 }
 
 /* ===== MODAL ===== */
@@ -359,12 +358,36 @@ body {
 }
 
 .modal-content {
+  position: relative;
   background: var(--bg-secondary);
   border-radius: var(--radius);
   padding: 2rem;
   width: 100%;
   max-width: 480px;
   box-shadow: var(--shadow);
+}
+
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   border: 1px solid var(--bg-tertiary);
 }
 
@@ -467,9 +490,9 @@ body {
 }
 
 .position-btn.active {
-  border-color: var(--position-color);
-  background: color-mix(in srgb, var(--position-color) 15%, transparent);
-  color: var(--position-color);
+  background: var(--position-color);
+  color: white;
+  border-color: transparent;
 }
 
 /* Modal Actions */

@@ -56,6 +56,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
   return (
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={handleClose}>×</button>
         <h2>{existingPlayer ? 'Edit Player' : 'Add Player'}</h2>
         
         <div className="form-group">
@@ -97,6 +98,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                 onClick={() => setPosition(position === pos ? null : pos)}
                 style={{
                   '--position-color': POSITION_COLORS[pos],
+                  backgroundColor: position === pos ? POSITION_COLORS[pos] : undefined,
                 } as React.CSSProperties}
               >
                 {POSITION_LABELS[pos]}
@@ -112,9 +114,6 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
             </button>
           )}
           <div className="modal-actions-right">
-            <button className="btn-cancel" onClick={handleClose}>
-              Cancel
-            </button>
             <button className="btn-save" onClick={handleSave} disabled={!name.trim()}>
               {existingPlayer ? 'Update' : 'Add'}
             </button>
