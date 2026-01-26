@@ -577,72 +577,73 @@ body {
   }
 
   .arena {
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .court {
-    width: 100%;
-    max-width: 400px;
+    width: auto;
+    flex: 1;
+    max-width: 320px;
     height: auto;
-    min-height: 280px;
+    min-height: 260px;
     padding: 1rem;
   }
 
   .court-grid {
-    gap: 0.75rem;
-    margin-top: 1.5rem;
+    gap: 0.5rem;
+    margin-top: 2rem;
   }
 
   .sub-bench {
-    flex-direction: row;
-    width: 100%;
-    max-width: 400px;
-    padding: 0.75rem;
+    width: 80px;
+    padding: 0.5rem;
   }
 
   .sub-bench-label {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    padding: 0.25rem;
+    font-size: 0.6rem;
   }
 
   .sub-slots {
-    flex-direction: row;
-    flex: 1;
-    gap: 0.5rem;
-  }
-
-  .sub-slots .player-slot {
-    flex: 1;
+    gap: 0.4rem;
   }
 
   .sub-add-btn {
-    flex: 1;
     min-height: 50px;
+    font-size: 1rem;
   }
 
   .controls {
     width: 100%;
-    max-width: 400px;
+    max-width: 100%;
     padding: 1rem;
     gap: 1rem;
   }
 
   .player-slot {
-    min-height: 65px;
-    padding: 0.75rem;
-  }
-
-  .player-slot.small {
-    min-height: 50px;
+    min-height: 55px;
     padding: 0.5rem;
   }
 
+  .player-slot.small {
+    min-height: 45px;
+    padding: 0.4rem;
+  }
+
+  .player-name {
+    font-size: 0.7rem;
+  }
+
+  .player-slot.small .player-name {
+    font-size: 0.6rem;
+  }
+
+  .player-position-badge {
+    font-size: 0.55rem;
+    padding: 0.15rem 0.35rem;
+  }
+
   .empty-cell {
-    min-height: 65px;
+    min-height: 55px;
   }
 }
 
@@ -688,7 +689,7 @@ body {
 
   .court-grid {
     gap: 0.5rem;
-    margin-top: 1.25rem;
+    margin-top: 1.5rem;
     padding: 0.25rem;
   }
 
@@ -705,12 +706,16 @@ body {
   }
 
   .player-name {
-    font-size: 0.8rem;
+    font-size: 0.65rem;
+  }
+
+  .player-slot.small .player-name {
+    font-size: 0.55rem;
   }
 
   .player-position-badge {
-    font-size: 0.55rem;
-    padding: 0.15rem 0.4rem;
+    font-size: 0.5rem;
+    padding: 0.1rem 0.3rem;
   }
 
   .slot-plus {
@@ -722,18 +727,19 @@ body {
   }
 
   .sub-bench {
-    padding: 0.5rem;
-    gap: 0.5rem;
+    width: 70px;
+    padding: 0.4rem;
+    gap: 0.4rem;
     border-radius: var(--radius-sm);
   }
 
   .sub-bench-label {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
   }
 
   .sub-add-btn {
-    min-height: 45px;
-    font-size: 1rem;
+    min-height: 40px;
+    font-size: 0.9rem;
   }
 
   .controls {
@@ -794,7 +800,8 @@ body {
 
   .form-group input {
     padding: 0.65rem 0.75rem;
-    font-size: 16px; /* Prevents zoom on iOS */
+    font-size: 16px;
+    /* Prevents zoom on iOS */
   }
 
   .gender-buttons {
@@ -838,46 +845,70 @@ body {
 /* Extra small screens */
 @media (max-width: 360px) {
   .app {
-    padding: 0.5rem;
+    padding: 0.35rem;
   }
 
   .header h1 {
     font-size: 1.25rem;
   }
 
+  .arena {
+    gap: 0.25rem;
+  }
+
   .court {
-    min-height: 200px;
-    padding: 0.5rem;
+    min-height: 180px;
+    padding: 0.4rem;
   }
 
   .court-grid {
-    gap: 0.35rem;
-    margin-top: 1rem;
+    gap: 0.25rem;
+    margin-top: 1.25rem;
   }
 
   .player-slot {
-    min-height: 45px;
-    padding: 0.35rem;
+    min-height: 40px;
+    padding: 0.25rem;
   }
 
   .player-slot.small {
-    min-height: 40px;
+    min-height: 35px;
+    padding: 0.2rem;
   }
 
   .player-name {
-    font-size: 0.7rem;
-  }
-
-  .player-position-badge {
-    font-size: 0.5rem;
-    padding: 0.1rem 0.3rem;
-  }
-
-  .sub-bench-label {
     font-size: 0.55rem;
   }
 
+  .player-slot.small .player-name {
+    font-size: 0.5rem;
+  }
+
+  .player-position-badge {
+    font-size: 0.4rem;
+    padding: 0.08rem 0.2rem;
+  }
+
+  .sub-bench {
+    width: 55px;
+    padding: 0.25rem;
+    gap: 0.25rem;
+  }
+
+  .sub-bench-label {
+    font-size: 0.5rem;
+  }
+
+  .sub-add-btn {
+    min-height: 35px;
+    font-size: 0.8rem;
+  }
+
   .empty-cell {
-    min-height: 45px;
+    min-height: 40px;
+  }
+
+  .slot-plus {
+    font-size: 1rem;
   }
 }
