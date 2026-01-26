@@ -1,10 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Player, CourtSlot, SubSlot } from './types';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
 import { Controls } from './components/Controls';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import './App.css';
+
+const STORAGE_KEY = 'volleyball-lineup-data';
+
+interface StoredData {
+  playerCount: number;
+  minGirls: number;
+  courtSlots: CourtSlot[];
+  leftSubs: SubSlot[];
+  rightSubs: SubSlot[];
+}
+
+function loadFromStorage(): StoredData | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load from localStorage:', e);
+  }
+  return null;
+}
+
+function saveToStorage(data: StoredData): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Failed to save to localStorage:', e);
+  }
+}
 
 function generateId() {
   return Math.random().toString(36).substring(2, 9);
@@ -120,17 +150,35 @@ function compactSubs(subs: SubSlot[]): SubSlot[] {
 }
 
 function App() {
-  const [playerCount, setPlayerCount] = useState(6);
-  const [minGirls, setMinGirls] = useState(2);
-  const [courtSlots, setCourtSlots] = useState<CourtSlot[]>(() =>
-    Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i }))
-  );
-  const [leftSubs, setLeftSubs] = useState<SubSlot[]>(() =>
-    Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i }))
-  );
-  const [rightSubs, setRightSubs] = useState<SubSlot[]>(() =>
-    Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i }))
-  );
+  // Load initial state from localStorage or use defaults
+  const [playerCount, setPlayerCount] = useState(() => {
+    const stored = loadFromStorage();
+    return stored?.playerCount ?? 6;
+  });
+  const [minGirls, setMinGirls] = useState(() => {
+    const stored = loadFromStorage();
+    return stored?.minGirls ?? 2;
+  });
+  const [courtSlots, setCourtSlots] = useState<CourtSlot[]>(() => {
+    const stored = loadFromStorage();
+    if (stored?.courtSlots) return stored.courtSlots;
+    return Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i }));
+  });
+  const [leftSubs, setLeftSubs] = useState<SubSlot[]>(() => {
+    const stored = loadFromStorage();
+    if (stored?.leftSubs) return stored.leftSubs;
+    return Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i }));
+  });
+  const [rightSubs, setRightSubs] = useState<SubSlot[]>(() => {
+    const stored = loadFromStorage();
+    if (stored?.rightSubs) return stored.rightSubs;
+    return Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i }));
+  });
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    saveToStorage({ playerCount, minGirls, courtSlots, leftSubs, rightSubs });
+  }, [playerCount, minGirls, courtSlots, leftSubs, rightSubs]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<{
@@ -561,7 +609,7 @@ function App() {
           <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
           <Court slots={courtSlots} onSlotClick={handleSlotClick} />
           <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
-        </div>
+      </div>
 
         <Controls
           playerCount={playerCount}
@@ -582,7 +630,7 @@ function App() {
         onRemove={getCurrentPlayer() ? handleRemovePlayer : undefined}
         existingPlayer={getCurrentPlayer()}
       />
-    </div>
+      </div>
   );
 }
 
