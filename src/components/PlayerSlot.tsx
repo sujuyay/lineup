@@ -17,10 +17,10 @@ export function PlayerSlot({ player, onClick, size = 'normal' }: PlayerSlotProps
   
     return (
         <div
-            className={`player-slot ${size}`}
+            className={`player-slot ${size} ${player ? 'filled' : ''}`}
             onClick={onClick}
             style={{
-                borderColor: player ? positionColor : '#2d3748',
+                borderColor: player ? positionColor : undefined,
                 background: player ? `linear-gradient(135deg, ${positionColor}22, ${positionColor}44)` : undefined,
             }}
         >

@@ -158,6 +158,10 @@ body {
   transform: translateY(-2px);
 }
 
+.player-slot.filled {
+  border-style: solid;
+}
+
 .player-slot.small {
   min-height: 60px;
   padding: 0.75rem;
