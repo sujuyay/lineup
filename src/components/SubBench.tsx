@@ -6,12 +6,13 @@ interface SubBenchProps {
   side: 'left' | 'right';
   onSubClick: (side: 'left' | 'right', slotIndex: number) => void;
   onAddSub: (side: 'left' | 'right') => void;
+  canAddSubs: boolean;
 }
 
-export function SubBench({ subs, side, onSubClick, onAddSub }: SubBenchProps) {
+export function SubBench({ subs, side, onSubClick, onAddSub, canAddSubs }: SubBenchProps) {
   // Get subs that have players
   const filledSubs = subs.filter((sub) => sub.player !== null);
-  const canAddMore = filledSubs.length < 3;
+  const canAddMore = canAddSubs && filledSubs.length < 3;
 
   return (
     <div className={`sub-bench ${side}`}>

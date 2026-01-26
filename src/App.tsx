@@ -60,6 +60,9 @@ function App() {
     side?: 'left' | 'right';
   } | null>(null);
 
+  // Check if all court slots are filled
+  const isCourtFull = courtSlots.every((slot) => slot.player !== null);
+
   // Update court slots when player count changes
   const handlePlayerCountChange = useCallback((count: number) => {
     setPlayerCount(count);
@@ -334,9 +337,9 @@ function App() {
 
       <main className="main">
         <div className="arena">
-          <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} />
+          <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
           <Court slots={courtSlots} onSlotClick={handleSlotClick} />
-          <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} />
+          <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
         </div>
 
         <Controls
