@@ -1,7 +1,6 @@
 interface ControlsProps {
   playerCount: number;
   minGirls: number;
-  currentGirlsOnCourt: number;
   onPlayerCountChange: (count: number) => void;
   onMinGirlsChange: (min: number) => void;
   onRotate: (direction: 'forward' | 'backward') => void;
@@ -10,7 +9,6 @@ interface ControlsProps {
 export function Controls({
   playerCount,
   minGirls,
-  currentGirlsOnCourt,
   onPlayerCountChange,
   onMinGirlsChange,
   onRotate,
@@ -18,10 +16,10 @@ export function Controls({
   return (
     <div className="controls">
       <div className="control-group">
-        <label>Rotate</label>
+        <label className="label-large">Rotate</label>
         <div className="rotate-input">
-          <button onClick={() => onRotate('backward')}>←</button>
-          <button onClick={() => onRotate('forward')}>→</button>
+          <button onClick={() => onRotate('backward')}>&lt;</button>
+          <button onClick={() => onRotate('forward')}>&gt;</button>
         </div>
       </div>
 
@@ -60,9 +58,6 @@ export function Controls({
           >
             +
           </button>
-        </div>
-        <div className={`girls-status ${currentGirlsOnCourt >= minGirls ? 'met' : 'not-met'}`}>
-          {currentGirlsOnCourt} / {minGirls} girls on court
         </div>
       </div>
     </div>

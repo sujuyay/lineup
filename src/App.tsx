@@ -51,10 +51,6 @@ function App() {
     side?: 'left' | 'right';
   } | null>(null);
 
-  // Count girls currently on court
-  const currentGirlsOnCourt = courtSlots.filter(
-    (slot) => slot.player?.gender === 'female'
-  ).length;
 
   // Update court slots when player count changes
   const handlePlayerCountChange = useCallback((count: number) => {
@@ -305,7 +301,6 @@ function App() {
     <div className="app">
       <header className="header">
         <h1>🏐 Volleyball Lineup</h1>
-        <p>Configure your team's rotation</p>
       </header>
 
       <main className="main">
@@ -318,7 +313,6 @@ function App() {
         <Controls
           playerCount={playerCount}
           minGirls={minGirls}
-          currentGirlsOnCourt={currentGirlsOnCourt}
           onPlayerCountChange={handlePlayerCountChange}
           onMinGirlsChange={setMinGirls}
           onRotate={handleRotate}

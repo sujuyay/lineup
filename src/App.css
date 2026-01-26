@@ -91,10 +91,11 @@ body {
   position: relative;
   box-shadow: var(--shadow);
   border: 2px solid var(--court-lines);
-  min-width: 400px;
-  min-height: 350px;
+  width: 400px;
+  height: 350px;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .court-net-label {
@@ -213,7 +214,8 @@ body {
   background: var(--bg-secondary);
   border-radius: var(--radius);
   border: 1px solid var(--bg-tertiary);
-  min-width: 100px;
+  width: 100px;
+  flex-shrink: 0;
 }
 
 .sub-bench-label {
@@ -259,6 +261,11 @@ body {
   letter-spacing: 0.1em;
 }
 
+.control-group label.label-large {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
 .number-input {
   display: flex;
   align-items: center;
@@ -298,21 +305,6 @@ body {
   text-align: center;
   font-weight: 600;
   font-size: 1.1rem;
-}
-
-.girls-status {
-  font-size: 0.8rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 1rem;
-  background: var(--bg-tertiary);
-}
-
-.girls-status.met {
-  color: var(--accent-primary);
-}
-
-.girls-status.not-met {
-  color: var(--danger);
 }
 
 .rotate-input {
