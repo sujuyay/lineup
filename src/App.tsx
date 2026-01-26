@@ -332,16 +332,26 @@ function App() {
     let blockRightExit = false;
     
     if (totalGirlsAfter < minGirls) {
-      if (leftWillSub && leftExitPlayer?.gender === 'female') {
-        const girlsIfBlockLeft = girlsRemaining + 1;
-        if (girlsIfBlockLeft + girlsEntering >= minGirls) {
-          blockLeftExit = true;
-        }
-      }
+      const leftExitIsFemale = leftWillSub && leftExitPlayer?.gender === 'female';
+      const rightExitIsFemale = rightWillSub && rightExitPlayer?.gender === 'female';
       
-      const currentGirls = girlsRemaining + (blockLeftExit ? 1 : 0) + girlsEntering;
-      if (currentGirls < minGirls && rightWillSub && rightExitPlayer?.gender === 'female') {
-        blockRightExit = true;
+      // Calculate girls we'd have if we block various combinations
+      const girlsIfBlockLeft = girlsRemaining + (leftExitIsFemale ? 1 : 0);
+      const girlsIfBlockRight = girlsRemaining + (rightExitIsFemale ? 1 : 0);
+      const girlsIfBlockBoth = girlsRemaining + (leftExitIsFemale ? 1 : 0) + (rightExitIsFemale ? 1 : 0);
+      
+      // Try to find minimum blocking needed
+      if (girlsIfBlockBoth + girlsEntering >= minGirls) {
+        // Blocking both would work - now find minimum needed
+        if (girlsIfBlockLeft + girlsEntering >= minGirls && leftExitIsFemale) {
+          blockLeftExit = true;
+        } else if (girlsIfBlockRight + girlsEntering >= minGirls && rightExitIsFemale) {
+          blockRightExit = true;
+        } else {
+          // Need to block both
+          if (leftExitIsFemale) blockLeftExit = true;
+          if (rightExitIsFemale) blockRightExit = true;
+        }
       }
     }
     

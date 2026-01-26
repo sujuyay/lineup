@@ -261,7 +261,7 @@ body {
   padding: 1.5rem;
   background: var(--bg-secondary);
   border-radius: var(--radius);
-  width: 425px;
+  width: 350px;
   /* Match court width (400px min + padding) */
   margin: 0 auto;
 }
