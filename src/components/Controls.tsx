@@ -28,8 +28,8 @@ export function Controls({
           </button>
           <span>{playerCount}</span>
           <button 
-            onClick={() => onPlayerCountChange(Math.min(12, playerCount + 1))}
-            disabled={playerCount >= 12}
+            onClick={() => onPlayerCountChange(Math.min(6, playerCount + 1))}
+            disabled={playerCount >= 6}
           >
             +
           </button>

@@ -4,12 +4,34 @@ import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
 import { Controls } from './components/Controls';
 import { AddPlayerModal } from './components/AddPlayerModal';
-import { Legend } from './components/Legend';
 import './App.css';
 
 function generateId() {
   return Math.random().toString(36).substring(2, 9);
 }
+
+// Volleyball court positions for 6 players:
+// Visual layout:
+//   Front row (near net): [slot 0 = pos 4] [slot 1 = pos 3] [slot 2 = pos 2]
+//   Back row:             [slot 3 = pos 5] [slot 4 = pos 6] [slot 5 = pos 1]
+// 
+// Clockwise rotation order: 1 → 2 → 3 → 4 → 5 → 6 → 1
+// In slot indices: 5 → 2 → 1 → 0 → 3 → 4 → 5
+// Position 1 (slot 5) is the serve position and rotates out
+
+// Maps slot index to the next slot in clockwise rotation
+const CLOCKWISE_ROTATION: Record<number, number> = {
+  5: -1, // Position 1 rotates out
+  2: 5,  // Position 2 → Position 1
+  1: 2,  // Position 3 → Position 2
+  0: 1,  // Position 4 → Position 3
+  3: 0,  // Position 5 → Position 4
+  4: 3,  // Position 6 → Position 5
+};
+
+// Position 6 (slot 4) is where subs enter
+const SUB_ENTRY_SLOT = 4;
+const SERVE_SLOT = 5; // Position 1 - where players rotate out
 
 function App() {
   const [playerCount, setPlayerCount] = useState(6);
@@ -126,60 +148,99 @@ function App() {
     setEditingSlot(null);
   };
 
-  // Rotation logic that maintains minimum girls requirement
+  // Clockwise rotation logic that maintains minimum girls requirement
   const handleRotate = () => {
-    setCourtSlots((prevSlots) => {
-      // Standard volleyball rotation: each player moves to the next position
-      // Position 1 -> out, Position 2 -> 1, 3 -> 2, etc., sub comes in at last position
-      const rotatedPlayers = prevSlots.map((slot) => slot.player);
-      
-      // Rotate: player at position 0 goes out, others shift down
-      const outgoingPlayer = rotatedPlayers[0];
-      const newOnCourtPlayers = [...rotatedPlayers.slice(1)];
-      
-      // Find a suitable sub to bring in
-      const allSubs = [...leftSubs, ...rightSubs].filter((s) => s.player !== null);
-      
-      // Calculate how many girls would be on court after rotation (before adding new player)
-      const girlsAfterRotation = newOnCourtPlayers.filter(
-        (p) => p?.gender === 'female'
-      ).length;
-      
-      // Determine what gender we need
-      let needFemale = girlsAfterRotation < minGirls;
-      
-      // If outgoing player was female, we need to check if we're still meeting the requirement
-      if (outgoingPlayer?.gender === 'female') {
-        needFemale = girlsAfterRotation < minGirls;
-      }
-      
-      // Find the best sub to bring in
-      let subToUse: Player | null = null;
-      let subSource: { side: 'left' | 'right'; index: number } | null = null;
-      
-      // First, try to find a sub that matches our gender requirement
-      for (const sub of allSubs) {
-        if (needFemale && sub.player?.gender === 'female') {
-          subToUse = sub.player;
-          subSource = { side: sub.side, index: sub.slotIndex };
-          break;
-        } else if (!needFemale && sub.player) {
-          subToUse = sub.player;
-          subSource = { side: sub.side, index: sub.slotIndex };
-          break;
+    // Get current players indexed by slot
+    const currentPlayers = courtSlots.map((slot) => slot.player);
+    
+    // Find available subs
+    const allSubs = [...leftSubs, ...rightSubs].filter((s) => s.player !== null);
+    
+    // Get the player at position 1 (serve position, slot 5) who would normally rotate out
+    const playerAtServePosition = currentPlayers[SERVE_SLOT];
+    
+    // Count girls on court excluding the player at serve position
+    const girlsExcludingServe = currentPlayers.filter(
+      (p, i) => i !== SERVE_SLOT && p?.gender === 'female'
+    ).length;
+    
+    // Check if rotating out the serve position player would violate min girls requirement
+    const wouldViolateMinGirls = 
+      playerAtServePosition?.gender === 'female' && 
+      girlsExcludingServe < minGirls;
+    
+    // Find sub to bring in
+    let subToUse: Player | null = null;
+    let subSource: { side: 'left' | 'right'; index: number } | null = null;
+    
+    if (allSubs.length > 0) {
+      // If we need a female, try to find one
+      if (wouldViolateMinGirls) {
+        const femaleSub = allSubs.find((s) => s.player?.gender === 'female');
+        if (femaleSub) {
+          subToUse = femaleSub.player;
+          subSource = { side: femaleSub.side, index: femaleSub.slotIndex };
         }
       }
       
-      // If we need female but couldn't find one, just use any available sub
-      if (!subToUse && allSubs.length > 0) {
+      // If we don't need female specifically, or couldn't find one, use first available
+      if (!subToUse) {
         subToUse = allSubs[0].player;
         subSource = { side: allSubs[0].side, index: allSubs[0].slotIndex };
       }
+    }
+    
+    // Determine if girl at serve position should stay on court
+    const girlMustStay = wouldViolateMinGirls && 
+      (!subToUse || subToUse.gender !== 'female');
+    
+    // Create new player positions array
+    const newPlayers: (Player | null)[] = new Array(6).fill(null);
+    
+    if (girlMustStay) {
+      // The girl at serve position stays and moves to position 6 (sub entry slot)
+      // Everyone else rotates normally, but no one exits
       
-      // Add the new player at the end
-      newOnCourtPlayers.push(subToUse);
+      // Move the girl from serve position to sub entry position
+      newPlayers[SUB_ENTRY_SLOT] = playerAtServePosition;
       
-      // Move the outgoing player to the sub's spot
+      // Rotate everyone else clockwise (except serve and sub entry positions)
+      for (let slot = 0; slot < 6; slot++) {
+        if (slot === SERVE_SLOT) continue; // This player is moving to SUB_ENTRY_SLOT
+        if (slot === SUB_ENTRY_SLOT) continue; // Already handled
+        
+        const nextSlot = CLOCKWISE_ROTATION[slot];
+        if (nextSlot === -1) continue; // Would rotate out
+        
+        newPlayers[nextSlot] = currentPlayers[slot];
+      }
+      
+      // The player that was at position 6 (sub entry slot) moves to position 5 (next in rotation)
+      const playerAtSubEntry = currentPlayers[SUB_ENTRY_SLOT];
+      newPlayers[3] = playerAtSubEntry; // Position 6 → Position 5 (slot 4 → slot 3)
+      
+      // No sub comes in, no one goes out
+      // Sub stays where they are
+      
+    } else {
+      // Normal clockwise rotation
+      let outgoingPlayer: Player | null = null;
+      
+      // Apply clockwise rotation
+      for (let slot = 0; slot < 6; slot++) {
+        const nextSlot = CLOCKWISE_ROTATION[slot];
+        if (nextSlot === -1) {
+          // This player rotates out
+          outgoingPlayer = currentPlayers[slot];
+        } else {
+          newPlayers[nextSlot] = currentPlayers[slot];
+        }
+      }
+      
+      // Sub enters at position 6 (slot 4)
+      newPlayers[SUB_ENTRY_SLOT] = subToUse;
+      
+      // Move outgoing player to sub bench
       if (subSource) {
         if (subSource.side === 'left') {
           setLeftSubs((prev) =>
@@ -195,7 +256,7 @@ function App() {
           );
         }
       } else if (outgoingPlayer) {
-        // No sub available, find an empty sub spot
+        // No sub was used, find an empty sub spot
         const emptyLeftSub = leftSubs.findIndex((s) => !s.player);
         const emptyRightSub = rightSubs.findIndex((s) => !s.player);
         
@@ -212,14 +273,16 @@ function App() {
             )
           );
         }
-        // If no empty spots, the player is just removed
       }
-      
-      return prevSlots.map((slot, i) => ({
+    }
+    
+    // Update court slots
+    setCourtSlots((prev) =>
+      prev.map((slot, i) => ({
         ...slot,
-        player: newOnCourtPlayers[i] || null,
-      }));
-    });
+        player: newPlayers[i],
+      }))
+    );
   };
 
   return (
@@ -244,8 +307,6 @@ function App() {
           onMinGirlsChange={setMinGirls}
           onRotate={handleRotate}
         />
-
-        <Legend />
       </main>
 
       <AddPlayerModal

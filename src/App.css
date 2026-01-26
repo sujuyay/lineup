@@ -165,13 +165,28 @@ body {
   font-size: 0.85rem;
 }
 
-.player-position-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  position: absolute;
-  top: 8px;
-  left: 8px;
+.player-slot.small .player-position-badge {
+  font-size: 0.55rem;
+  padding: 0.15rem 0.35rem;
+}
+
+.player-slot.small .player-name {
+  font-size: 0.8rem;
+}
+
+.player-slot.small .player-gender {
+  font-size: 0.9rem;
+}
+
+.player-position-badge {
+  font-size: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .player-name {
@@ -330,44 +345,6 @@ body {
 
 .rotate-btn:hover .rotate-icon {
   transform: rotate(180deg);
-}
-
-/* ===== LEGEND ===== */
-.legend {
-  padding: 1rem 1.5rem;
-  background: var(--bg-secondary);
-  border-radius: var(--radius);
-}
-
-.legend h3 {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.75rem;
-}
-
-.legend-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.legend-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-}
-
-.legend-item span {
-  font-size: 0.85rem;
-  color: var(--text-primary);
 }
 
 /* ===== MODAL ===== */

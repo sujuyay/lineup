@@ -1,5 +1,5 @@
 import type { Player } from '../types';
-import { POSITION_COLORS } from '../types';
+import { POSITION_COLORS, POSITION_LABELS } from '../types';
 
 interface PlayerSlotProps {
   player: Player | null;
@@ -23,9 +23,11 @@ export function PlayerSlot({ player, label, onClick, size = 'normal' }: PlayerSl
       {player ? (
         <>
           <div 
-            className="player-position-dot"
+            className="player-position-badge"
             style={{ backgroundColor: positionColor }}
-          />
+          >
+            {player.position ? POSITION_LABELS[player.position] : 'No Position'}
+          </div>
           <span className="player-name">{player.name}</span>
           <span className="player-gender">{player.gender === 'female' ? '♀' : '♂'}</span>
         </>
@@ -35,4 +37,3 @@ export function PlayerSlot({ player, label, onClick, size = 'normal' }: PlayerSl
     </div>
   );
 }
-
