@@ -186,23 +186,37 @@ function App() {
         });
       }
     } else if (count < oldCount) {
-      // Decreasing: prioritize displacing men over women
-      // Sort players: women first (keep), men last (displace)
+      // Decreasing: prioritize displacing men over women, but keep original order
+      const numToDisplace = oldCount - count;
       const allPlayers = courtSlots
         .map((s, i) => ({ player: s.player, originalIndex: i }))
         .filter((s): s is { player: Player; originalIndex: number } => s.player !== null);
       
-      // Sort: females first, males last
-      allPlayers.sort((a, b) => {
-        if (a.player.gender === 'female' && b.player.gender === 'male') return -1;
-        if (a.player.gender === 'male' && b.player.gender === 'female') return 1;
-        return a.originalIndex - b.originalIndex; // Maintain order within same gender
-      });
+      // Select players to displace: men first (from end), then women (from end)
+      const men = allPlayers.filter(p => p.player.gender === 'male').reverse();
+      const women = allPlayers.filter(p => p.player.gender === 'female').reverse();
+      const toDisplaceIndices = new Set<number>();
       
-      const playersToKeep = allPlayers.slice(0, count).map(s => s.player);
-      const displacedPlayers = allPlayers.slice(count).map(s => s.player);
+      // Add men first (from end of court)
+      for (const p of men) {
+        if (toDisplaceIndices.size >= numToDisplace) break;
+        toDisplaceIndices.add(p.originalIndex);
+      }
+      // Then women if needed (from end of court)
+      for (const p of women) {
+        if (toDisplaceIndices.size >= numToDisplace) break;
+        toDisplaceIndices.add(p.originalIndex);
+      }
       
-      // Rebuild court with kept players in first `count` slots
+      // Keep players in original order, excluding displaced
+      const playersToKeep = allPlayers
+        .filter(p => !toDisplaceIndices.has(p.originalIndex))
+        .map(p => p.player);
+      const displacedPlayers = allPlayers
+        .filter(p => toDisplaceIndices.has(p.originalIndex))
+        .map(p => p.player);
+      
+      // Rebuild court with kept players in original order
       setCourtSlots((prev) => 
         prev.slice(0, count).map((slot, i) => ({ 
           ...slot, 
