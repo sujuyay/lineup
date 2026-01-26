@@ -180,6 +180,27 @@ function App() {
     saveToStorage({ playerCount, minGirls, courtSlots, leftSubs, rightSubs });
   }, [playerCount, minGirls, courtSlots, leftSubs, rightSubs]);
 
+  // Check if there are any players
+  const hasPlayers = courtSlots.some(s => s.player !== null) || 
+    leftSubs.some(s => s.player !== null) || 
+    rightSubs.some(s => s.player !== null);
+
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+
+  // Reset all player data
+  const handleResetClick = () => {
+    setResetModalOpen(true);
+  };
+
+  const handleResetConfirm = () => {
+    setPlayerCount(6);
+    setMinGirls(2);
+    setCourtSlots(Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i })));
+    setLeftSubs(Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i })));
+    setRightSubs(Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i })));
+    setResetModalOpen(false);
+  };
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<{
     type: 'court' | 'sub' | 'newSub';
@@ -609,7 +630,7 @@ function App() {
           <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
           <Court slots={courtSlots} onSlotClick={handleSlotClick} />
           <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
-      </div>
+        </div>
 
         <Controls
           playerCount={playerCount}
@@ -617,6 +638,8 @@ function App() {
           onPlayerCountChange={handlePlayerCountChange}
           onMinGirlsChange={setMinGirls}
           onRotate={handleRotate}
+          onReset={handleResetClick}
+          showReset={hasPlayers}
         />
       </main>
 
@@ -630,7 +653,23 @@ function App() {
         onRemove={getCurrentPlayer() ? handleRemovePlayer : undefined}
         existingPlayer={getCurrentPlayer()}
       />
-      </div>
+
+      {/* Reset Confirmation Modal */}
+      {resetModalOpen && (
+        <div className="modal-overlay" onClick={() => setResetModalOpen(false)}>
+          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setResetModalOpen(false)}>×</button>
+            <h2>Reset Lineup?</h2>
+            <p className="confirm-message">All player data will be cleared. This cannot be undone.</p>
+            <div className="confirm-actions">
+              <button className="btn-confirm-reset" onClick={handleResetConfirm}>
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

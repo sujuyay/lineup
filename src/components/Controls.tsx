@@ -4,6 +4,8 @@ interface ControlsProps {
   onPlayerCountChange: (count: number) => void;
   onMinGirlsChange: (min: number) => void;
   onRotate: (direction: 'forward' | 'backward') => void;
+  onReset: () => void;
+  showReset: boolean;
 }
 
 export function Controls({
@@ -12,6 +14,8 @@ export function Controls({
     onPlayerCountChange,
     onMinGirlsChange,
     onRotate,
+    onReset,
+    showReset,
 }: ControlsProps) {
     return (
         <div className="controls">
@@ -60,6 +64,12 @@ export function Controls({
                     </button>
                 </div>
             </div>
+
+            {showReset && (
+                <button className="btn-reset" onClick={onReset}>
+                    Reset Lineup
+                </button>
+            )}
         </div>
     );
 }
