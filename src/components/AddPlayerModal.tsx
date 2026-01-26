@@ -66,7 +66,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                         value={name}
                         onChange={handleNameChange}
                         placeholder="Enter player name"
-                        autoFocus
+                        autoFocus={!existingPlayer}
                     />
                 </div>
 

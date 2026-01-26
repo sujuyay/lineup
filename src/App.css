@@ -144,7 +144,7 @@ body {
   gap: 0.5rem;
   padding: 1rem;
   background: var(--bg-secondary);
-  border: 2px dashed var(--text-muted);
+  border: 2px dotted var(--text-muted);
   border-radius: var(--radius);
   cursor: pointer;
   transition: all 0.2s ease;
