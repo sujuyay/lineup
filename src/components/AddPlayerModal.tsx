@@ -108,16 +108,16 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
         </div>
 
         <div className="modal-actions">
-          {existingPlayer && onRemove && (
+          {existingPlayer && onRemove ? (
             <button className="btn-remove" onClick={onRemove}>
               Remove
             </button>
+          ) : (
+            <div />
           )}
-          <div className="modal-actions-right">
-            <button className="btn-save" onClick={handleSave} disabled={!name.trim()}>
-              {existingPlayer ? 'Update' : 'Add'}
-            </button>
-          </div>
+          <button className="btn-save" onClick={handleSave} disabled={!name.trim()}>
+            {existingPlayer ? 'Update' : 'Add'}
+          </button>
         </div>
       </div>
     </div>

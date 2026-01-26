@@ -31,6 +31,15 @@ const COUNTER_CLOCKWISE_NEXT: Record<number, number> = {
   0: 3, 3: 4, 4: 5, 5: 2, 2: 1, 1: 0,
 };
 
+// Helper to compact subs (remove gaps)
+function compactSubs(subs: SubSlot[]): SubSlot[] {
+  const filledPlayers = subs.filter((s) => s.player !== null).map((s) => s.player);
+  return subs.map((s, i) => ({
+    ...s,
+    player: filledPlayers[i] || null,
+  }));
+}
+
 function App() {
   const [playerCount, setPlayerCount] = useState(6);
   const [minGirls, setMinGirls] = useState(2);
@@ -46,11 +55,10 @@ function App() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<{
-    type: 'court' | 'sub';
+    type: 'court' | 'sub' | 'newSub';
     index: number;
     side?: 'left' | 'right';
   } | null>(null);
-
 
   // Update court slots when player count changes
   const handlePlayerCountChange = useCallback((count: number) => {
@@ -81,14 +89,25 @@ function App() {
     setModalOpen(true);
   };
 
+  const handleAddSub = (side: 'left' | 'right') => {
+    // Find the first empty slot
+    const subs = side === 'left' ? leftSubs : rightSubs;
+    const emptyIndex = subs.findIndex((s) => s.player === null);
+    if (emptyIndex !== -1) {
+      setEditingSlot({ type: 'newSub', index: emptyIndex, side });
+      setModalOpen(true);
+    }
+  };
+
   const getCurrentPlayer = (): Player | null => {
     if (!editingSlot) return null;
     if (editingSlot.type === 'court') {
       return courtSlots[editingSlot.index]?.player || null;
-    } else {
+    } else if (editingSlot.type === 'sub') {
       const subs = editingSlot.side === 'left' ? leftSubs : rightSubs;
       return subs[editingSlot.index]?.player || null;
     }
+    return null; // newSub type has no existing player
   };
 
   const handleSavePlayer = (playerData: Omit<Player, 'id'>) => {
@@ -128,13 +147,15 @@ function App() {
           i === editingSlot.index ? { ...slot, player: null } : slot
         )
       );
-    } else {
+    } else if (editingSlot.type === 'sub') {
       const setSubs = editingSlot.side === 'left' ? setLeftSubs : setRightSubs;
-      setSubs((prev) =>
-        prev.map((slot, i) =>
+      setSubs((prev) => {
+        const updated = prev.map((slot, i) =>
           i === editingSlot.index ? { ...slot, player: null } : slot
-        )
-      );
+        );
+        // Compact the subs to remove gaps
+        return compactSubs(updated);
+      });
     }
 
     setModalOpen(false);
@@ -146,25 +167,24 @@ function App() {
     const currentPlayers = courtSlots.map((slot) => slot.player);
     const rotationMap = direction === 'forward' ? CLOCKWISE_NEXT : COUNTER_CLOCKWISE_NEXT;
     
-    // Find available subs on each side
-    const leftSubAvailable = leftSubs.find((s) => s.player !== null);
-    const rightSubAvailable = rightSubs.find((s) => s.player !== null);
+    // Get filled subs on each side
+    const leftFilledSubs = leftSubs.filter((s) => s.player !== null);
+    const rightFilledSubs = rightSubs.filter((s) => s.player !== null);
+    
+    // LEFT side: top sub (index 0) enters
+    // RIGHT side: bottom sub (last filled index) enters
+    const leftSubEntering = leftFilledSubs.length > 0 ? leftFilledSubs[0] : null;
+    const rightSubEntering = rightFilledSubs.length > 0 ? rightFilledSubs[rightFilledSubs.length - 1] : null;
     
     // Entry/exit positions depend on rotation direction
-    // Forward (clockwise):
-    //   LEFT sub: entry at 0 (front-left), exit at 3 (back-left)
-    //   RIGHT sub: entry at 5 (back-right), exit at 2 (front-right)
-    // Backward (counter-clockwise):
-    //   LEFT sub: entry at 3 (back-left), exit at 0 (front-left)
-    //   RIGHT sub: entry at 2 (front-right), exit at 5 (back-right)
     const LEFT_ENTRY = direction === 'forward' ? 0 : 3;
     const LEFT_EXIT = direction === 'forward' ? 3 : 0;
     const RIGHT_ENTRY = direction === 'forward' ? 5 : 2;
     const RIGHT_EXIT = direction === 'forward' ? 2 : 5;
     
     // Determine which sides will sub based on availability
-    const leftWillSub = !!leftSubAvailable;
-    const rightWillSub = !!rightSubAvailable;
+    const leftWillSub = !!leftSubEntering;
+    const rightWillSub = !!rightSubEntering;
     
     // Get players at exit positions
     const leftExitPlayer = currentPlayers[LEFT_EXIT];
@@ -180,8 +200,8 @@ function App() {
     
     // Count girls coming in from subs
     let girlsEntering = 0;
-    if (leftWillSub && leftSubAvailable?.player?.gender === 'female') girlsEntering++;
-    if (rightWillSub && rightSubAvailable?.player?.gender === 'female') girlsEntering++;
+    if (leftWillSub && leftSubEntering?.player?.gender === 'female') girlsEntering++;
+    if (rightWillSub && rightSubEntering?.player?.gender === 'female') girlsEntering++;
     
     // Check if rotation would violate min girls
     const totalGirlsAfter = girlsRemaining + girlsEntering;
@@ -191,16 +211,13 @@ function App() {
     let blockRightExit = false;
     
     if (totalGirlsAfter < minGirls) {
-      // We need to block some exits - prioritize keeping girls on court
-      // Check if blocking left exit helps (if left exit is female)
       if (leftWillSub && leftExitPlayer?.gender === 'female') {
-        const girlsIfBlockLeft = girlsRemaining + 1; // +1 for keeping left exit
+        const girlsIfBlockLeft = girlsRemaining + 1;
         if (girlsIfBlockLeft + girlsEntering >= minGirls) {
           blockLeftExit = true;
         }
       }
       
-      // Check if we still need to block right
       const currentGirls = girlsRemaining + (blockLeftExit ? 1 : 0) + girlsEntering;
       if (currentGirls < minGirls && rightWillSub && rightExitPlayer?.gender === 'female') {
         blockRightExit = true;
@@ -210,7 +227,6 @@ function App() {
     // Create new player positions
     const newPlayers: (Player | null)[] = new Array(6).fill(null);
     
-    // Track which slots are entry points (for subs or blocked players)
     const leftSubbing = leftWillSub && !blockLeftExit;
     const rightSubbing = rightWillSub && !blockRightExit;
     
@@ -218,43 +234,31 @@ function App() {
     for (let slot = 0; slot < 6; slot++) {
       const player = currentPlayers[slot];
       
-      // Handle left exit
       if (slot === LEFT_EXIT) {
         if (blockLeftExit) {
-          // Girl stays on court, moves to entry position
           newPlayers[LEFT_ENTRY] = player;
         } else if (leftSubbing) {
-          // Player exits (handled below)
           continue;
         } else {
-          // No left sub, player rotates normally
           newPlayers[rotationMap[slot]] = player;
         }
         continue;
       }
       
-      // Handle right exit
       if (slot === RIGHT_EXIT) {
         if (blockRightExit) {
-          // Girl stays on court, moves to entry position
           newPlayers[RIGHT_ENTRY] = player;
         } else if (rightSubbing) {
-          // Player exits (handled below)
           continue;
         } else {
-          // No right sub, player rotates normally
           newPlayers[rotationMap[slot]] = player;
         }
         continue;
       }
       
-      // Normal rotation for other slots
       let nextSlot = rotationMap[slot];
       
-      // If next slot is an entry point that's being used, adjust
       if (nextSlot === LEFT_ENTRY && (leftSubbing || blockLeftExit)) {
-        // This player needs to go somewhere else
-        // They go to where the exit player would have gone
         nextSlot = rotationMap[LEFT_EXIT];
       }
       if (nextSlot === RIGHT_ENTRY && (rightSubbing || blockRightExit)) {
@@ -265,27 +269,35 @@ function App() {
     }
     
     // Place subs at entry positions
-    if (leftSubbing && leftSubAvailable) {
-      newPlayers[LEFT_ENTRY] = leftSubAvailable.player;
+    if (leftSubbing && leftSubEntering) {
+      newPlayers[LEFT_ENTRY] = leftSubEntering.player;
     }
-    if (rightSubbing && rightSubAvailable) {
-      newPlayers[RIGHT_ENTRY] = rightSubAvailable.player;
+    if (rightSubbing && rightSubEntering) {
+      newPlayers[RIGHT_ENTRY] = rightSubEntering.player;
     }
     
-    // Move exiting players to bench
-    if (leftSubbing && leftSubAvailable) {
-      setLeftSubs((prev) =>
-        prev.map((s, i) =>
-          i === leftSubAvailable.slotIndex ? { ...s, player: leftExitPlayer } : s
-        )
-      );
+    // Update left subs: shift everyone up (remove top, add exiting player at bottom)
+    if (leftSubbing) {
+      setLeftSubs((prev) => {
+        const newSubs = [...prev];
+        // Shift up: remove the one that entered (index 0)
+        const players = prev.map((s) => s.player).filter((_, i) => i !== 0);
+        // Add exiting player at the end
+        players.push(leftExitPlayer);
+        return newSubs.map((s, i) => ({ ...s, player: players[i] || null }));
+      });
     }
-    if (rightSubbing && rightSubAvailable) {
-      setRightSubs((prev) =>
-        prev.map((s, i) =>
-          i === rightSubAvailable.slotIndex ? { ...s, player: rightExitPlayer } : s
-        )
-      );
+    
+    // Update right subs: shift everyone down (remove bottom, add exiting player at top)
+    if (rightSubbing && rightSubEntering) {
+      setRightSubs((prev) => {
+        const newSubs = [...prev];
+        // Get current players, remove the one that entered (last filled)
+        const players = prev.map((s) => s.player).filter((p) => p !== rightSubEntering.player);
+        // Add exiting player at the beginning
+        players.unshift(rightExitPlayer);
+        return newSubs.map((s, i) => ({ ...s, player: players[i] || null }));
+      });
     }
     
     // Update court slots
@@ -300,14 +312,14 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🏐 Volleyball Lineup</h1>
+        <h1>Volleyball Lineup</h1>
       </header>
 
       <main className="main">
         <div className="arena">
-          <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} />
+          <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} />
           <Court slots={courtSlots} onSlotClick={handleSlotClick} />
-          <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} />
+          <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} />
         </div>
 
         <Controls
