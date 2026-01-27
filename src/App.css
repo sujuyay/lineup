@@ -236,6 +236,35 @@ body {
   opacity: 1;
 }
 
+/* Drag and Drop States */
+.player-slot.dragging {
+  opacity: 0.5;
+  border-style: dashed;
+  border-color: var(--text-muted);
+  background: transparent;
+}
+
+.player-slot.drop-target {
+  border-color: var(--accent-primary) !important;
+  background: var(--accent-primary)22 !important;
+  box-shadow: 0 0 12px var(--accent-primary)44;
+}
+
+.player-slot.filled {
+  cursor: grab;
+}
+
+.player-slot.filled:active {
+  cursor: grabbing;
+}
+
+/* Drag Overlay */
+.drag-overlay-item {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
+  pointer-events: none;
+}
+
 /* ===== SUB BENCH ===== */
 .sub-bench {
   display: flex;

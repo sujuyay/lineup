@@ -1,13 +1,25 @@
-import type { CourtSlot } from '../types';
-import { PlayerSlot } from './PlayerSlot';
+import type { CourtSlot, Player } from '../types';
+import { DraggablePlayerSlot } from './DraggablePlayerSlot';
 
 interface CourtProps {
     slots: CourtSlot[];
     onSlotClick: (slotIndex: number) => void;
+    draggingPlayerId?: string | null;
+    draggingPlayer?: Player | null;
+    minGirls?: number;
+    isDraggingFromSub?: boolean;
 }
 
-export function Court({ slots, onSlotClick }: CourtProps) {
+export function Court({ 
+    slots, 
+    onSlotClick, 
+    draggingPlayerId,
+    draggingPlayer,
+    minGirls = 0,
+    isDraggingFromSub = false,
+}: CourtProps) {
     const playerCount = slots.length;
+    const currentGirlsOnCourt = slots.filter(s => s.player?.gender === 'female').length;
   
     // Calculate grid layout based on player count
     const getGridLayout = () => {
@@ -25,6 +37,17 @@ export function Court({ slots, onSlotClick }: CourtProps) {
     };
 
     const { rows, cols } = getGridLayout();
+
+    // Check if swapping the court player with the dragged sub would violate min girls
+    const isValidSwapTarget = (courtPlayer: Player | null) => {
+        if (!isDraggingFromSub || !draggingPlayer) return true;
+        
+        // If court player is female and incoming sub is not, check if it violates min girls
+        if (courtPlayer?.gender === 'female' && draggingPlayer.gender !== 'female') {
+            return currentGirlsOnCourt - 1 >= minGirls;
+        }
+        return true;
+    };
   
     // Create a proper volleyball court layout (front row and back row)
     const arrangeSlots = () => {
@@ -61,11 +84,17 @@ export function Court({ slots, onSlotClick }: CourtProps) {
             >
                 {arrangedSlots.flat().map((slot, idx) => {
                     if (!slot) return <div key={idx} className="empty-cell" />;
+                    const isBeingDragged = draggingPlayerId && slot.player?.id === draggingPlayerId;
+                    const isValidDrop = isValidSwapTarget(slot.player);
                     return (
-                        <PlayerSlot
+                        <DraggablePlayerSlot
                             key={slot.slotIndex}
+                            id={`court-${slot.slotIndex}`}
                             player={slot.player}
                             onClick={() => onSlotClick(slot.slotIndex)}
+                            canDrop={true}
+                            isBeingDragged={isBeingDragged || false}
+                            isValidDropTarget={isValidDrop}
                         />
                     );
                 })}
@@ -73,4 +102,3 @@ export function Court({ slots, onSlotClick }: CourtProps) {
         </div>
     );
 }
-

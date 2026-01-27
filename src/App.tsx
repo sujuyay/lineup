@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import type { Player, CourtSlot, SubSlot } from './types';
+import { POSITION_COLORS, POSITION_ABBREV } from './types';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
 import { Controls } from './components/Controls';
@@ -546,9 +550,10 @@ function App() {
       const girlsIfBlockRight = girlsRemaining + (rightExitIsFemale ? 1 : 0);
       const girlsIfBlockBoth = girlsRemaining + (leftExitIsFemale ? 1 : 0) + (rightExitIsFemale ? 1 : 0);
       
-      // Try to find minimum blocking needed
+      // Try to find minimum blocking needed to maximize girls on court
+      // Even if we can't meet minGirls, we should still block female exits to keep as many girls as possible
       if (girlsIfBlockBoth + girlsEntering >= minGirls) {
-        // Blocking both would work - now find minimum needed
+        // Blocking can satisfy the requirement - find minimum needed
         if (girlsIfBlockLeft + girlsEntering >= minGirls && leftExitIsFemale) {
           blockLeftExit = true;
         } else if (girlsIfBlockRight + girlsEntering >= minGirls && rightExitIsFemale) {
@@ -558,6 +563,11 @@ function App() {
           if (leftExitIsFemale) blockLeftExit = true;
           if (rightExitIsFemale) blockRightExit = true;
         }
+      } else {
+        // Can't satisfy requirement even with blocking, but still block all female exits
+        // to keep as many girls on court as possible
+        if (leftExitIsFemale) blockLeftExit = true;
+        if (rightExitIsFemale) blockRightExit = true;
       }
     }
     
@@ -662,6 +672,336 @@ function App() {
     );
   };
 
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  // Track the actively dragged player for overlay
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeDragPlayer, setActiveDragPlayer] = useState<Player | null>(null);
+  const [originalCourtSlots, setOriginalCourtSlots] = useState<CourtSlot[] | null>(null);
+  const [originalSlotIndex, setOriginalSlotIndex] = useState<number | null>(null);
+
+  // Parse slot ID helper
+  const parseSlotId = (id: string) => {
+    if (id.startsWith('court-')) {
+      return { type: 'court' as const, index: parseInt(id.replace('court-', '')) };
+    } else if (id.startsWith('sub-')) {
+      const parts = id.replace('sub-', '').split('-');
+      return { type: 'sub' as const, side: parts[0] as 'left' | 'right', index: parseInt(parts[1]) };
+    }
+    return null;
+  };
+
+  // Get player from slot
+  const getPlayerFromSlot = (slot: { type: 'court'; index: number } | { type: 'sub'; side: 'left' | 'right'; index: number }) => {
+    if (slot.type === 'court') {
+      return courtSlots[slot.index]?.player;
+    } else {
+      const subs = slot.side === 'left' ? leftSubs : rightSubs;
+      return subs[slot.index]?.player;
+    }
+  };
+
+  // Check if moving a player to sub would violate min girls requirement
+  const wouldViolateMinGirls = (player: Player | null | undefined, incomingSub: Player | null | undefined) => {
+    if (!player || player.gender !== 'female') return false;
+    
+    // Count current girls on court
+    const currentGirls = courtSlots.filter(s => s.player?.gender === 'female').length;
+    
+    // If incoming sub is also female, no violation
+    if (incomingSub?.gender === 'female') return false;
+    
+    // Would removing this female violate the requirement?
+    return currentGirls - 1 < minGirls;
+  };
+
+  // Handle drag start
+  const handleDragStart = (event: DragStartEvent) => {
+    const id = String(event.active.id);
+    setActiveId(id);
+    
+    const slot = parseSlotId(id);
+    if (slot) {
+      const player = getPlayerFromSlot(slot);
+      setActiveDragPlayer(player || null);
+      
+      // Save original state for court drags so we can restore if dropped back at original position
+      if (slot.type === 'court') {
+        setOriginalCourtSlots([...courtSlots]);
+        setOriginalSlotIndex(slot.index);
+      }
+    }
+  };
+
+  // Handle drag over - for live reordering of court slots
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    
+    const activeSlot = parseSlotId(String(active.id));
+    
+    // Helper to restore court to original state if needed
+    const restoreOriginalIfNeeded = () => {
+      if (originalCourtSlots && activeDragPlayer && originalSlotIndex !== null) {
+        const currentIndex = courtSlots.findIndex(s => s.player?.id === activeDragPlayer.id);
+        if (currentIndex !== originalSlotIndex) {
+          setCourtSlots(originalCourtSlots);
+        }
+      }
+    };
+    
+    // If dragging outside valid targets, restore original state immediately
+    if (!over) {
+      restoreOriginalIfNeeded();
+      return;
+    }
+
+    const overSlot = parseSlotId(String(over.id));
+    
+    if (!activeSlot || !overSlot) return;
+
+    // If dragging from court to non-court (e.g., sub), restore original court state
+    // This ensures the swap will happen from the original position
+    if (activeSlot.type === 'court' && overSlot.type !== 'court') {
+      restoreOriginalIfNeeded();
+      return;
+    }
+
+    // Only live reorder for court-to-court
+    if (activeSlot.type === 'court' && overSlot.type === 'court') {
+      // Find the current index of the dragged player by their ID
+      // since the player may have moved from the original slot
+      if (!activeDragPlayer) return;
+      
+      const currentIndex = courtSlots.findIndex(s => s.player?.id === activeDragPlayer.id);
+      const newIndex = overSlot.index;
+      
+      // Only reorder if the player isn't already at this position
+      if (currentIndex !== -1 && currentIndex !== newIndex) {
+        setCourtSlots(prev => {
+          const newSlots = arrayMove(prev, currentIndex, newIndex);
+          return newSlots.map((slot, i) => ({ ...slot, slotIndex: i }));
+        });
+      }
+    }
+  };
+
+  // Handle drag cancel (when dropped outside valid targets or ESC pressed)
+  const handleDragCancel = () => {
+    // Restore original state if we have it
+    if (originalCourtSlots) {
+      setCourtSlots(originalCourtSlots);
+    }
+    
+    // Clear drag state
+    setActiveId(null);
+    setActiveDragPlayer(null);
+    setOriginalCourtSlots(null);
+    setOriginalSlotIndex(null);
+  };
+
+  // Handle drag end
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    const origSlots = originalCourtSlots;
+    const origIndex = originalSlotIndex;
+    const draggedPlayer = activeDragPlayer;
+    
+    // Clear drag state
+    setActiveId(null);
+    setActiveDragPlayer(null);
+    setOriginalCourtSlots(null);
+    setOriginalSlotIndex(null);
+    
+    // If dropped outside any valid target, restore original state
+    if (!over) {
+      if (origSlots) {
+        setCourtSlots(origSlots);
+      }
+      return;
+    }
+    
+    // If dropped on the same slot ID as started (original position), restore
+    if (active.id === over.id) {
+      if (origSlots) {
+        setCourtSlots(origSlots);
+      }
+      return;
+    }
+    
+    const activeSlot = parseSlotId(String(active.id));
+    const overSlot = parseSlotId(String(over.id));
+    
+    if (!activeSlot || !overSlot) return;
+
+    // Check if court drag ended at the original position
+    if (overSlot.type === 'court' && origIndex !== null && overSlot.index === origIndex && origSlots) {
+      // Dropped back at original position - restore original state
+      setCourtSlots(origSlots);
+      return;
+    }
+
+    const activePlayer = getPlayerFromSlot(activeSlot);
+    const overPlayer = getPlayerFromSlot(overSlot);
+    
+    // Rule 4: Court players can't be dragged to empty sub spots
+    if (activeSlot.type === 'court' && overSlot.type === 'sub' && !overPlayer) {
+      return;
+    }
+
+    // Rule: Prevent dragging female to sub if it violates min girls
+    if (activeSlot.type === 'court' && overSlot.type === 'sub') {
+      if (wouldViolateMinGirls(activePlayer, overPlayer)) {
+        return;
+      }
+    }
+    
+    // Court to Court is already handled in dragOver, so skip here
+    if (activeSlot.type === 'court' && overSlot.type === 'court') {
+      return;
+    }
+    
+    // Case 2 & 3: Court to Sub or Sub to Court - swap
+    if ((activeSlot.type === 'court' && overSlot.type === 'sub') ||
+      (activeSlot.type === 'sub' && overSlot.type === 'court')) {
+      const subSlot = activeSlot.type === 'sub' ? activeSlot : overSlot;
+      const subSide = (subSlot as { side: 'left' | 'right'; index: number }).side;
+      const subIndex = (subSlot as { side: 'left' | 'right'; index: number }).index;
+      const subs = subSide === 'left' ? leftSubs : rightSubs;
+      const subPlayer = subs[subIndex]?.player;
+
+      // Find the court player's CURRENT position (may have changed due to live reordering)
+      let courtPlayerIndex: number;
+      let courtPlayer: Player | null;
+      
+      if (activeSlot.type === 'court' && draggedPlayer) {
+        // Dragging from court to sub - find where the dragged player currently is
+        courtPlayerIndex = courtSlots.findIndex(s => s.player?.id === draggedPlayer.id);
+        courtPlayer = draggedPlayer;
+      } else {
+        // Dragging from sub to court - use the target court slot
+        courtPlayerIndex = (overSlot as { index: number }).index;
+        courtPlayer = courtSlots[courtPlayerIndex]?.player ?? null;
+      }
+
+      if (courtPlayerIndex === -1) return;
+
+      // Check min girls for court-to-sub swap
+      if (activeSlot.type === 'court') {
+        if (wouldViolateMinGirls(courtPlayer, subPlayer)) {
+          return;
+        }
+      }
+
+      // Check min girls for sub-to-court swap too
+      if (activeSlot.type === 'sub') {
+        if (wouldViolateMinGirls(courtPlayer, subPlayer)) {
+          return;
+        }
+      }
+      
+      // Swap players
+      setCourtSlots(prev => prev.map((slot, i) => 
+        i === courtPlayerIndex ? { ...slot, player: subPlayer } : slot
+      ));
+      
+      const setSubs = subSide === 'left' ? setLeftSubs : setRightSubs;
+      setSubs(prev => prev.map((slot, i) => 
+        i === subIndex ? { ...slot, player: courtPlayer } : slot
+      ));
+    }
+    
+    // Case: Sub to Sub (same or different side) - swap
+    if (activeSlot.type === 'sub' && overSlot.type === 'sub') {
+      const activeSide = (activeSlot as { side: 'left' | 'right'; index: number }).side;
+      const activeIndex = (activeSlot as { side: 'left' | 'right'; index: number }).index;
+      const overSide = (overSlot as { side: 'left' | 'right'; index: number }).side;
+      const overIndex = (overSlot as { side: 'left' | 'right'; index: number }).index;
+      
+      if (activeSide === overSide) {
+        // Same side - swap within
+        const setSubs = activeSide === 'left' ? setLeftSubs : setRightSubs;
+        setSubs(prev => {
+          const newSubs = [...prev];
+          const temp = newSubs[activeIndex].player;
+          newSubs[activeIndex] = { ...newSubs[activeIndex], player: newSubs[overIndex].player };
+          newSubs[overIndex] = { ...newSubs[overIndex], player: temp };
+          return newSubs;
+        });
+      } else {
+        // Different sides - swap across
+        const activeSubs = activeSide === 'left' ? leftSubs : rightSubs;
+        const overSubs = overSide === 'left' ? leftSubs : rightSubs;
+        const activePlayer = activeSubs[activeIndex]?.player;
+        const overPlayer = overSubs[overIndex]?.player;
+        
+        const setActiveSubs = activeSide === 'left' ? setLeftSubs : setRightSubs;
+        const setOverSubs = overSide === 'left' ? setLeftSubs : setRightSubs;
+        
+        setActiveSubs(prev => prev.map((s, i) => i === activeIndex ? { ...s, player: overPlayer } : s));
+        setOverSubs(prev => prev.map((s, i) => i === overIndex ? { ...s, player: activePlayer } : s));
+      }
+    }
+  };
+
+  // Render drag overlay content
+  // Helper to create opaque background from position color
+  const getOpaqueBackground = (hexColor: string) => {
+    // Convert hex to RGB and blend with dark background
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    
+    // Blend with dark bg (#1a1f2e) at ~15% and ~25% opacity
+    const bgR = 26, bgG = 31, bgB = 46;
+    const light = {
+      r: Math.round(bgR + (r - bgR) * 0.15),
+      g: Math.round(bgG + (g - bgG) * 0.15),
+      b: Math.round(bgB + (b - bgB) * 0.15),
+    };
+    const dark = {
+      r: Math.round(bgR + (r - bgR) * 0.25),
+      g: Math.round(bgG + (g - bgG) * 0.25),
+      b: Math.round(bgB + (b - bgB) * 0.25),
+    };
+    
+    return `linear-gradient(135deg, rgb(${light.r}, ${light.g}, ${light.b}), rgb(${dark.r}, ${dark.g}, ${dark.b}))`;
+  };
+
+  const renderDragOverlay = () => {
+    if (!activeDragPlayer) return null;
+    
+    const positionColor = activeDragPlayer.position ? POSITION_COLORS[activeDragPlayer.position] : '#4a5568';
+
+    return (
+      <div 
+        className="player-slot filled drag-overlay-item"
+        style={{
+          borderColor: positionColor,
+          background: getOpaqueBackground(positionColor),
+        }}
+      >
+        {activeDragPlayer.position && (
+          <div 
+            className="player-position-badge"
+            style={{ backgroundColor: positionColor }}
+          >
+            {POSITION_ABBREV[activeDragPlayer.position]}
+          </div>
+        )}
+        <span className="player-name">{activeDragPlayer.name}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -681,11 +1021,51 @@ function App() {
       </div>
 
       <main className="main">
-        <div className="arena">
-          <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
-          <Court slots={courtSlots} onSlotClick={handleSlotClick} />
-          <SubBench subs={rightSubs} side="right" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
-        </div>
+        <DndContext 
+          sensors={sensors} 
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="arena">
+            <SubBench 
+              subs={leftSubs} 
+              side="left" 
+              onSubClick={handleSubClick} 
+              onAddSub={handleAddSub} 
+              canAddSubs={isCourtFull} 
+              draggingPlayerId={activeDragPlayer?.id}
+              draggingPlayer={activeDragPlayer}
+              minGirls={minGirls}
+              currentGirlsOnCourt={courtSlots.filter(s => s.player?.gender === 'female').length}
+              isDraggingFromCourt={activeId?.startsWith('court-') ?? false}
+            />
+            <Court 
+              slots={courtSlots} 
+              onSlotClick={handleSlotClick} 
+              draggingPlayerId={activeDragPlayer?.id}
+              draggingPlayer={activeDragPlayer}
+              minGirls={minGirls}
+              isDraggingFromSub={activeId?.startsWith('sub-') ?? false}
+            />
+            <SubBench 
+              subs={rightSubs} 
+              side="right" 
+              onSubClick={handleSubClick} 
+              onAddSub={handleAddSub} 
+              canAddSubs={isCourtFull} 
+              draggingPlayerId={activeDragPlayer?.id}
+              draggingPlayer={activeDragPlayer}
+              minGirls={minGirls}
+              currentGirlsOnCourt={courtSlots.filter(s => s.player?.gender === 'female').length}
+              isDraggingFromCourt={activeId?.startsWith('court-') ?? false}
+            />
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeId ? renderDragOverlay() : null}
+          </DragOverlay>
+        </DndContext>
 
         <Controls
           playerCount={playerCount}
