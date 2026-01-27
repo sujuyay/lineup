@@ -76,7 +76,7 @@ export function Court({
             <div className="court-net-label">NET</div>
             <div className="court-net" />
             <div 
-                className="court-grid"
+                className={`court-grid players-${playerCount}`}
                 style={{
                     gridTemplateColumns: `repeat(${cols}, 1fr)`,
                     gridTemplateRows: `repeat(${rows}, 1fr)`,
