@@ -6,9 +6,10 @@ import { Controls } from './components/Controls';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import './App.css';
 
-const STORAGE_KEY = 'volleyball-lineup-data';
+const STORAGE_KEY = 'volleyball-lineup-data-v2';
+const NUM_LINEUPS = 6;
 
-interface StoredData {
+interface Lineup {
   playerCount: number;
   minGirls: number;
   courtSlots: CourtSlot[];
@@ -16,16 +17,40 @@ interface StoredData {
   rightSubs: SubSlot[];
 }
 
-function loadFromStorage(): StoredData | null {
+interface StoredData {
+  activeLineupIndex: number;
+  lineups: Lineup[];
+}
+
+function createEmptyLineup(): Lineup {
+  return {
+    playerCount: 6,
+    minGirls: 2,
+    courtSlots: Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i })),
+    leftSubs: Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i })),
+    rightSubs: Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i })),
+  };
+}
+
+function loadFromStorage(): StoredData {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const data = JSON.parse(stored);
+      // Ensure we have all 6 lineups
+      while (data.lineups.length < NUM_LINEUPS) {
+        data.lineups.push(createEmptyLineup());
+      }
+      return data;
     }
   } catch (e) {
     console.error('Failed to load from localStorage:', e);
   }
-  return null;
+  // Return default: 6 empty lineups
+  return {
+    activeLineupIndex: 0,
+    lineups: Array.from({ length: NUM_LINEUPS }, () => createEmptyLineup()),
+  };
 }
 
 function saveToStorage(data: StoredData): void {
@@ -150,35 +175,55 @@ function compactSubs(subs: SubSlot[]): SubSlot[] {
 }
 
 function App() {
-  // Load initial state from localStorage or use defaults
-  const [playerCount, setPlayerCount] = useState(() => {
+  // Load all lineups from localStorage
+  const [activeLineupIndex, setActiveLineupIndex] = useState(() => {
     const stored = loadFromStorage();
-    return stored?.playerCount ?? 6;
+    return stored.activeLineupIndex;
   });
-  const [minGirls, setMinGirls] = useState(() => {
+  const [lineups, setLineups] = useState<Lineup[]>(() => {
     const stored = loadFromStorage();
-    return stored?.minGirls ?? 2;
+    return stored.lineups;
   });
-  const [courtSlots, setCourtSlots] = useState<CourtSlot[]>(() => {
-    const stored = loadFromStorage();
-    if (stored?.courtSlots) return stored.courtSlots;
-    return Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i }));
-  });
-  const [leftSubs, setLeftSubs] = useState<SubSlot[]>(() => {
-    const stored = loadFromStorage();
-    if (stored?.leftSubs) return stored.leftSubs;
-    return Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i }));
-  });
-  const [rightSubs, setRightSubs] = useState<SubSlot[]>(() => {
-    const stored = loadFromStorage();
-    if (stored?.rightSubs) return stored.rightSubs;
-    return Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i }));
-  });
+
+  // Get current lineup data
+  const currentLineup = lineups[activeLineupIndex];
+  const { playerCount, minGirls, courtSlots, leftSubs, rightSubs } = currentLineup;
+
+  // Update functions that modify the current lineup
+  const updateCurrentLineup = (updates: Partial<Lineup>) => {
+    setLineups(prev => prev.map((lineup, i) => 
+      i === activeLineupIndex ? { ...lineup, ...updates } : lineup
+    ));
+  };
+
+  const setPlayerCount = (count: number) => updateCurrentLineup({ playerCount: count });
+  const setMinGirls = (min: number) => updateCurrentLineup({ minGirls: min });
+  const setCourtSlots = (updater: CourtSlot[] | ((prev: CourtSlot[]) => CourtSlot[])) => {
+    setLineups(prev => prev.map((lineup, i) => {
+      if (i !== activeLineupIndex) return lineup;
+      const newSlots = typeof updater === 'function' ? updater(lineup.courtSlots) : updater;
+      return { ...lineup, courtSlots: newSlots };
+    }));
+  };
+  const setLeftSubs = (updater: SubSlot[] | ((prev: SubSlot[]) => SubSlot[])) => {
+    setLineups(prev => prev.map((lineup, i) => {
+      if (i !== activeLineupIndex) return lineup;
+      const newSubs = typeof updater === 'function' ? updater(lineup.leftSubs) : updater;
+      return { ...lineup, leftSubs: newSubs };
+    }));
+  };
+  const setRightSubs = (updater: SubSlot[] | ((prev: SubSlot[]) => SubSlot[])) => {
+    setLineups(prev => prev.map((lineup, i) => {
+      if (i !== activeLineupIndex) return lineup;
+      const newSubs = typeof updater === 'function' ? updater(lineup.rightSubs) : updater;
+      return { ...lineup, rightSubs: newSubs };
+    }));
+  };
 
   // Save to localStorage whenever state changes
   useEffect(() => {
-    saveToStorage({ playerCount, minGirls, courtSlots, leftSubs, rightSubs });
-  }, [playerCount, minGirls, courtSlots, leftSubs, rightSubs]);
+    saveToStorage({ activeLineupIndex, lineups });
+  }, [activeLineupIndex, lineups]);
 
   // Check if there are any players
   const hasPlayers = courtSlots.some(s => s.player !== null) || 
@@ -193,11 +238,9 @@ function App() {
   };
 
   const handleResetConfirm = () => {
-    setPlayerCount(6);
-    setMinGirls(2);
-    setCourtSlots(Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i })));
-    setLeftSubs(Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i })));
-    setRightSubs(Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i })));
+    setLineups(prev => prev.map((lineup, i) => 
+      i === activeLineupIndex ? createEmptyLineup() : lineup
+    ));
     setResetModalOpen(false);
   };
 
@@ -321,7 +364,7 @@ function App() {
       }
     }
     
-    setMinGirls((prev) => Math.min(prev, count));
+    setMinGirls(Math.min(minGirls, count));
   };
 
   const handleSlotClick = (slotIndex: number) => {
@@ -625,6 +668,18 @@ function App() {
         <h1>Volleyball Lineup</h1>
       </header>
 
+      <div className="lineup-tabs">
+        {lineups.map((_, index) => (
+          <button
+            key={index}
+            className={`lineup-tab ${index === activeLineupIndex ? 'active' : ''}`}
+            onClick={() => setActiveLineupIndex(index)}
+          >
+            Lineup {index + 1}
+          </button>
+        ))}
+      </div>
+
       <main className="main">
         <div className="arena">
           <SubBench subs={leftSubs} side="left" onSubClick={handleSubClick} onAddSub={handleAddSub} canAddSubs={isCourtFull} />
@@ -640,6 +695,7 @@ function App() {
           onRotate={handleRotate}
           onReset={handleResetClick}
           showReset={hasPlayers}
+          lineupNumber={activeLineupIndex + 1}
         />
       </main>
 
@@ -659,7 +715,7 @@ function App() {
         <div className="modal-overlay" onClick={() => setResetModalOpen(false)}>
           <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setResetModalOpen(false)}>×</button>
-            <h2>Reset Lineup?</h2>
+            <h2>Reset Lineup {activeLineupIndex + 1}?</h2>
             <p className="confirm-message">All player data will be cleared. This cannot be undone.</p>
             <div className="confirm-actions">
               <button className="btn-confirm-reset" onClick={handleResetConfirm}>

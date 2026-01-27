@@ -6,6 +6,7 @@ interface ControlsProps {
   onRotate: (direction: 'forward' | 'backward') => void;
   onReset: () => void;
   showReset: boolean;
+  lineupNumber: number;
 }
 
 export function Controls({
@@ -16,6 +17,7 @@ export function Controls({
     onRotate,
     onReset,
     showReset,
+    lineupNumber,
 }: ControlsProps) {
     return (
         <div className="controls">
@@ -47,7 +49,7 @@ export function Controls({
             </div>
 
             <div className="control-group">
-                <label>Min Girls</label>
+                <label>Min Females</label>
                 <div className="number-input">
                     <button 
                         onClick={() => onMinGirlsChange(Math.max(0, minGirls - 1))}
@@ -67,7 +69,7 @@ export function Controls({
 
             {showReset && (
                 <button className="btn-reset" onClick={onReset}>
-                    Reset Lineup
+                    Reset Lineup {lineupNumber}
                 </button>
             )}
         </div>

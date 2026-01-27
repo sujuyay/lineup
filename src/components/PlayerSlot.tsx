@@ -7,7 +7,7 @@ interface PlayerSlotProps {
     size?: 'normal' | 'small';
 }
 
-function truncateName(name: string, maxLength: number = 10): string {
+function truncateName(name: string, maxLength: number = 8): string {
     if (name.length <= maxLength) return name;
     return name.slice(0, maxLength) + '…';
 }
