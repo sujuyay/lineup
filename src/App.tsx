@@ -675,7 +675,7 @@ function App() {
             className={`lineup-tab ${index === activeLineupIndex ? 'active' : ''}`}
             onClick={() => setActiveLineupIndex(index)}
           >
-            Lineup {index + 1}
+            L{index + 1}
           </button>
         ))}
       </div>
