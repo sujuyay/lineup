@@ -193,6 +193,7 @@ body {
 
 .player-slot.filled {
   border-style: solid;
+  touch-action: none;
 }
 
 .player-slot.small {
