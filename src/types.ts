@@ -16,8 +16,6 @@ export interface CourtSlot {
 
 export interface SubSlot {
     player: Player | null;
-    side: 'left' | 'right';
-    slotIndex: number;
 }
 
 export const POSITION_COLORS: Record<Position, string> = {

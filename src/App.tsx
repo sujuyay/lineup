@@ -12,6 +12,7 @@ import './App.css';
 
 const STORAGE_KEY = 'volleyball-lineup-data-v2';
 const NUM_LINEUPS = 6;
+const MAX_SUBS_PER_SIDE = 4;
 
 interface Lineup {
   playerCount: number;
@@ -31,34 +32,55 @@ function createEmptyLineup(): Lineup {
     playerCount: 6,
     minGirls: 2,
     courtSlots: Array.from({ length: 6 }, (_, i) => ({ player: null, slotIndex: i })),
-    leftSubs: Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'left' as const, slotIndex: i })),
-    rightSubs: Array.from({ length: 3 }, (_, i) => ({ player: null, side: 'right' as const, slotIndex: i })),
+    leftSubs: [],
+    rightSubs: [],
   };
 }
 
-function loadFromStorage(): StoredData {
+function migrateLineup(lineup: Lineup): Lineup {
+  // Remove empty sub slots from old format - we now only store filled subs
+  lineup.leftSubs = lineup.leftSubs.filter(s => s.player !== null);
+  lineup.rightSubs = lineup.rightSubs.filter(s => s.player !== null);
+  return lineup;
+}
+
+function loadFromStorage(): Lineup[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      const data = JSON.parse(stored);
-      // Ensure we have all 6 lineups
-      while (data.lineups.length < NUM_LINEUPS) {
-        data.lineups.push(createEmptyLineup());
+      const data: StoredData = JSON.parse(stored);
+      const lineups = data.lineups.map(migrateLineup);
+      // Ensure we have all lineups
+      while (lineups.length < NUM_LINEUPS) {
+        lineups.push(createEmptyLineup());
       }
-      return data;
+      return lineups;
     }
   } catch (e) {
     console.error('Failed to load from localStorage:', e);
   }
-  // Return default: 6 empty lineups
-  return {
-    activeLineupIndex: 0,
-    lineups: Array.from({ length: NUM_LINEUPS }, () => createEmptyLineup()),
-  };
+  return Array.from({ length: NUM_LINEUPS }, () => createEmptyLineup());
 }
 
-function saveToStorage(data: StoredData): void {
+function loadActiveIndex(): number {
   try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const data: StoredData = JSON.parse(stored);
+      return data.activeLineupIndex ?? 0;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 0;
+}
+
+function saveToStorage(activeLineupIndex: number, lineups: Lineup[]): void {
+  try {
+    const data: StoredData = {
+      activeLineupIndex,
+      lineups,
+    };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     console.error('Failed to save to localStorage:', e);
@@ -169,25 +191,15 @@ function getSubPositions(playerCount: number, direction: 'forward' | 'backward')
   }
 }
 
-// Helper to compact subs (remove gaps)
+// Helper to compact subs (remove empty slots)
 function compactSubs(subs: SubSlot[]): SubSlot[] {
-  const filledPlayers = subs.filter((s) => s.player !== null).map((s) => s.player);
-  return subs.map((s, i) => ({
-    ...s,
-    player: filledPlayers[i] || null,
-  }));
+  return subs.filter((s) => s.player !== null);
 }
 
 function App() {
   // Load all lineups from localStorage
-  const [activeLineupIndex, setActiveLineupIndex] = useState(() => {
-    const stored = loadFromStorage();
-    return stored.activeLineupIndex;
-  });
-  const [lineups, setLineups] = useState<Lineup[]>(() => {
-    const stored = loadFromStorage();
-    return stored.lineups;
-  });
+  const [activeLineupIndex, setActiveLineupIndex] = useState(() => loadActiveIndex());
+  const [lineups, setLineups] = useState<Lineup[]>(() => loadFromStorage());
 
   // Get current lineup data
   const currentLineup = lineups[activeLineupIndex];
@@ -226,7 +238,7 @@ function App() {
 
   // Save to localStorage whenever state changes
   useEffect(() => {
-    saveToStorage({ activeLineupIndex, lineups });
+    saveToStorage(activeLineupIndex, lineups);
   }, [activeLineupIndex, lineups]);
 
   // Check if there are any players
@@ -266,17 +278,17 @@ function App() {
     if (count > oldCount) {
       // Increasing: fill new slots from subs (left top to bottom, then right top to bottom)
       const newSlotCount = count - oldCount;
-      const leftFilledSubs = leftSubs.filter(s => s.player !== null);
-      const rightFilledSubs = rightSubs.filter(s => s.player !== null);
-      const availableSubs = [...leftFilledSubs, ...rightFilledSubs];
+      const leftPlayers = leftSubs.map(s => s.player).filter((p): p is Player => p !== null);
+      const rightPlayers = rightSubs.map(s => s.player).filter((p): p is Player => p !== null);
+      const availablePlayers = [...leftPlayers, ...rightPlayers];
       
-      const subsToMove = availableSubs.slice(0, newSlotCount);
-      const leftSubsToRemove = subsToMove.filter(s => s.side === 'left').length;
-      const rightSubsToRemove = subsToMove.filter(s => s.side === 'right').length;
+      const playersToMove = availablePlayers.slice(0, newSlotCount);
+      const leftSubsToRemove = Math.min(leftPlayers.length, newSlotCount);
+      const rightSubsToRemove = Math.max(0, newSlotCount - leftPlayers.length);
       
       setCourtSlots((prev) => {
         const newSlots = Array.from({ length: newSlotCount }, (_, i) => ({
-          player: subsToMove[i]?.player || null,
+          player: playersToMove[i] || null,
           slotIndex: oldCount + i,
         }));
         return [...prev, ...newSlots];
@@ -284,22 +296,10 @@ function App() {
       
       // Remove subs that moved to court
       if (leftSubsToRemove > 0) {
-        setLeftSubs((prev) => {
-          const remaining = prev.map((s, i) => ({
-            ...s,
-            player: i < leftSubsToRemove ? null : s.player,
-          }));
-          return compactSubs(remaining);
-        });
+        setLeftSubs((prev) => prev.slice(leftSubsToRemove));
       }
       if (rightSubsToRemove > 0) {
-        setRightSubs((prev) => {
-          const remaining = prev.map((s, i) => ({
-            ...s,
-            player: i < rightSubsToRemove ? null : s.player,
-          }));
-          return compactSubs(remaining);
-        });
+        setRightSubs((prev) => prev.slice(rightSubsToRemove));
       }
     } else if (count < oldCount) {
       // Decreasing: prioritize displacing men over women, but keep original order
@@ -343,27 +343,23 @@ function App() {
       
       // Add displaced players to sub benches
       if (displacedPlayers.length > 0) {
-        const leftFilledCount = leftSubs.filter(s => s.player !== null).length;
-        const rightFilledCount = rightSubs.filter(s => s.player !== null).length;
-        const leftAvailable = 3 - leftFilledCount;
-        const rightAvailable = 3 - rightFilledCount;
+        const leftAvailable = MAX_SUBS_PER_SIDE - leftSubs.length;
+        const rightAvailable = MAX_SUBS_PER_SIDE - rightSubs.length;
         
         const toLeft = displacedPlayers.slice(0, leftAvailable);
         const toRight = displacedPlayers.slice(leftAvailable, leftAvailable + rightAvailable);
         
         if (toLeft.length > 0) {
-          setLeftSubs((prev) => {
-            const filled = prev.filter(s => s.player !== null);
-            const newSubs = [...filled.map(s => s.player), ...toLeft];
-            return prev.map((s, i) => ({ ...s, player: newSubs[i] || null }));
-          });
+          setLeftSubs((prev) => [
+            ...prev,
+            ...toLeft.map((player) => ({ player }))
+          ]);
         }
         if (toRight.length > 0) {
-          setRightSubs((prev) => {
-            const filled = prev.filter(s => s.player !== null);
-            const newSubs = [...filled.map(s => s.player), ...toRight];
-            return prev.map((s, i) => ({ ...s, player: newSubs[i] || null }));
-          });
+          setRightSubs((prev) => [
+            ...prev,
+            ...toRight.map((player) => ({ player }))
+          ]);
         }
       }
     }
@@ -382,11 +378,9 @@ function App() {
   };
 
   const handleAddSub = (side: 'left' | 'right') => {
-    // Find the first empty slot
     const subs = side === 'left' ? leftSubs : rightSubs;
-    const emptyIndex = subs.findIndex((s) => s.player === null);
-    if (emptyIndex !== -1) {
-      setEditingSlot({ type: 'newSub', index: emptyIndex, side });
+    if (subs.length < MAX_SUBS_PER_SIDE) {
+      setEditingSlot({ type: 'newSub', index: subs.length, side });
       setModalOpen(true);
     }
   };
@@ -419,11 +413,16 @@ function App() {
       );
     } else {
       const setSubs = editingSlot.side === 'left' ? setLeftSubs : setRightSubs;
-      setSubs((prev) =>
-        prev.map((slot, i) =>
+      setSubs((prev) => {
+        // If adding a new sub (index equals array length), push new slot
+        if (editingSlot.index >= prev.length) {
+          return [...prev, { player }];
+        }
+        // Otherwise update existing slot
+        return prev.map((slot, i) =>
           i === editingSlot.index ? { ...slot, player } : slot
-        )
-      );
+        );
+      });
     }
 
     setModalOpen(false);
@@ -447,21 +446,11 @@ function App() {
           )
         );
         
-        // Remove sub from bench and compact
+        // Remove sub from bench (first filled sub was used)
         if (leftFilledSub) {
-          setLeftSubs((prev) => {
-            const updated = prev.map((slot, i) =>
-              i === leftFilledSub.slotIndex ? { ...slot, player: null } : slot
-            );
-            return compactSubs(updated);
-          });
+          setLeftSubs((prev) => prev.slice(1));
         } else {
-          setRightSubs((prev) => {
-            const updated = prev.map((slot, i) =>
-              i === rightFilledSub!.slotIndex ? { ...slot, player: null } : slot
-            );
-            return compactSubs(updated);
-          });
+          setRightSubs((prev) => prev.slice(1));
         }
       } else {
         // No subs available, just remove the player
@@ -624,22 +613,22 @@ function App() {
     }
     
     // Update left subs based on direction
-    // Forward: top enters, exiting goes to bottom. [A, B, null] -> [B, X, null]
-    // Backward: bottom enters, exiting goes to top. [A, B, null] -> [X, A, null]
+    // Forward: top enters, exiting goes to bottom. [A, B] -> [B, X]
+    // Backward: bottom enters, exiting goes to top. [A, B] -> [X, A]
     if (leftSubbing && leftSubEntering && leftExitPlayer) {
       setLeftSubs((prev) => {
-        const filledPlayers = prev.map((s) => s.player).filter((p): p is Player => p !== null);
+        const players = prev.map((s) => s.player).filter((p): p is Player => p !== null);
         let newPlayers: Player[];
         
         if (direction === 'forward') {
           // Remove first (top), add exiting to end (bottom)
-          newPlayers = [...filledPlayers.slice(1), leftExitPlayer];
+          newPlayers = [...players.slice(1), leftExitPlayer];
         } else {
           // Remove last (bottom), add exiting to start (top)
-          newPlayers = [leftExitPlayer, ...filledPlayers.slice(0, -1)];
+          newPlayers = [leftExitPlayer, ...players.slice(0, -1)];
         }
         
-        return prev.map((s, i) => ({ ...s, player: newPlayers[i] || null }));
+        return newPlayers.map((player) => ({ player }));
       });
     }
     
@@ -648,18 +637,18 @@ function App() {
     // Backward: top enters, exiting goes to bottom. [A, B, C] -> [B, C, X]
     if (rightSubbing && rightSubEntering && rightExitPlayer) {
       setRightSubs((prev) => {
-        const filledPlayers = prev.map((s) => s.player).filter((p): p is Player => p !== null);
+        const players = prev.map((s) => s.player).filter((p): p is Player => p !== null);
         let newPlayers: Player[];
         
         if (direction === 'forward') {
           // Remove last (bottom), add exiting to start (top)
-          newPlayers = [rightExitPlayer, ...filledPlayers.slice(0, -1)];
+          newPlayers = [rightExitPlayer, ...players.slice(0, -1)];
         } else {
           // Remove first (top), add exiting to end (bottom)
-          newPlayers = [...filledPlayers.slice(1), rightExitPlayer];
+          newPlayers = [...players.slice(1), rightExitPlayer];
         }
         
-        return prev.map((s, i) => ({ ...s, player: newPlayers[i] || null }));
+        return newPlayers.map((player) => ({ player }));
       });
     }
     

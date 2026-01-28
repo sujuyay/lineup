@@ -28,7 +28,7 @@ export function SubBench({
 }: SubBenchProps) {
     // Get subs that have players
     const filledSubs = subs.filter((sub) => sub.player !== null);
-    const canAddMore = canAddSubs && filledSubs.length < 3;
+    const canAddMore = canAddSubs && filledSubs.length < 4;
 
     // Check if swapping the dragged player with a sub would violate min girls
     const isValidSwapTarget = (subPlayer: Player | null) => {
@@ -45,15 +45,15 @@ export function SubBench({
         <div className={`sub-bench ${side}`}>
             <div className="sub-bench-label">SUBS</div>
             <div className="sub-slots">
-                {filledSubs.map((sub) => {
+                {filledSubs.map((sub, index) => {
                     const isBeingDragged = draggingPlayerId && sub.player?.id === draggingPlayerId;
                     const isValidDrop = isValidSwapTarget(sub.player);
                     return (
                         <DraggablePlayerSlot
-                            key={`${sub.side}-${sub.slotIndex}`}
-                            id={`sub-${side}-${sub.slotIndex}`}
+                            key={`${side}-${index}`}
+                            id={`sub-${side}-${index}`}
                             player={sub.player}
-                            onClick={() => onSubClick(side, sub.slotIndex)}
+                            onClick={() => onSubClick(side, index)}
                             size="small"
                             canDrop={sub.player !== null}
                             isBeingDragged={isBeingDragged || false}
