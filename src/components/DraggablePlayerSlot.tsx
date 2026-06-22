@@ -10,21 +10,23 @@ interface DraggablePlayerSlotProps {
   canDrop?: boolean;
   isBeingDragged?: boolean;
   isValidDropTarget?: boolean;
+  showGender?: boolean;
 }
 
-function truncateName(name: string, maxLength: number = 8): string {
+function truncateName(name: string, maxLength: number = 6): string {
   if (name.length <= maxLength) return name;
   return name.slice(0, maxLength) + '…';
 }
 
-export function DraggablePlayerSlot({ 
-  id, 
-  player, 
-  onClick, 
+export function DraggablePlayerSlot({
+  id,
+  player,
+  onClick,
   size = 'normal',
   canDrop = true,
   isBeingDragged = false,
   isValidDropTarget = true,
+  showGender = false,
 }: DraggablePlayerSlotProps) {
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
     id,
@@ -76,7 +78,7 @@ export function DraggablePlayerSlot({
       {player ? (
         <>
           {player.position && (
-            <div 
+            <div
               className="player-position-badge"
               style={{ backgroundColor: positionColor }}
             >
@@ -86,6 +88,11 @@ export function DraggablePlayerSlot({
           <span className="player-name" title={player.name}>
             {truncateName(player.name)}
           </span>
+          {showGender && (
+            <span className="player-gender-label">
+              {player.gender === 'female' ? '[F]' : '[M]'}
+            </span>
+          )}
         </>
       ) : (
         <span className="slot-plus">+</span>

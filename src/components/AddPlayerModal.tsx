@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Player, Position, Gender } from '../types';
 import { POSITION_COLORS, POSITION_LABELS } from '../types';
 
@@ -8,27 +8,23 @@ interface AddPlayerModalProps {
     onSave: (player: Omit<Player, 'id'>) => void;
     onRemove?: () => void;
     existingPlayer?: Player | null;
+    /** When true, the player is a libero: position is forced and not selectable. */
+    isLibero?: boolean;
 }
 
-const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'libero', 'middle_blocker'];
+// 'libero' is intentionally omitted - it's only assigned via the libero slot.
+const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'middle_blocker'];
 
 function capitalizeWords(str: string): string {
     return str.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer }: AddPlayerModalProps) {
-    const [name, setName] = useState('');
-    const [position, setPosition] = useState<Position | null>(null);
-    const [gender, setGender] = useState<Gender>('male');
-
-    // Sync state with existingPlayer when modal opens or player changes
-    useEffect(() => {
-        if (isOpen) {
-            setName(existingPlayer?.name || '');
-            setPosition(existingPlayer?.position || null);
-            setGender(existingPlayer?.gender || 'male');
-        }
-    }, [isOpen, existingPlayer]);
+export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer, isLibero = false }: AddPlayerModalProps) {
+    // The modal is remounted (via a `key`) each time it opens, so these
+    // initializers seed the form from the player being edited.
+    const [name, setName] = useState(existingPlayer?.name || '');
+    const [position, setPosition] = useState<Position | null>(existingPlayer?.position || null);
+    const [gender, setGender] = useState<Gender>(existingPlayer?.gender || 'male');
 
     if (!isOpen) return null;
 
@@ -38,27 +34,15 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
 
     const handleSave = () => {
         if (!name.trim()) return;
-        onSave({ name: name.trim(), position, gender });
-        resetForm();
-    };
-
-    const handleClose = () => {
-        resetForm();
-        onClose();
-    };
-
-    const resetForm = () => {
-        setName('');
-        setPosition(null);
-        setGender('male');
+        onSave({ name: name.trim(), position: isLibero ? 'libero' : position, gender });
     };
 
     return (
-        <div className="modal-overlay" onClick={handleClose}>
+        <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                <button className="modal-close" onClick={handleClose}>×</button>
+                <button className="modal-close" onClick={onClose}>×</button>
                 <h2>{existingPlayer ? 'Edit Player' : 'Add Player'}</h2>
-        
+
                 <div className="form-group">
                     <label>Name</label>
                     <input
@@ -88,6 +72,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                     </div>
                 </div>
 
+                {!isLibero && (
                 <div className="form-group">
                     <label>Position</label>
                     <div className="position-buttons">
@@ -106,6 +91,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                         ))}
                     </div>
                 </div>
+                )}
 
                 <div className="modal-actions">
                     {existingPlayer && onRemove ? (

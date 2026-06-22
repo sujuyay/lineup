@@ -1,4 +1,4 @@
-import type { Player, SubSlot } from '../types';
+import type { SubSlot } from '../types';
 import { DraggablePlayerSlot } from './DraggablePlayerSlot';
 
 interface SubBenchProps {
@@ -8,46 +8,29 @@ interface SubBenchProps {
     onAddSub: (side: 'left' | 'right') => void;
     canAddSubs: boolean;
     draggingPlayerId?: string | null;
-    draggingPlayer?: Player | null;
-    minGirls?: number;
-    currentGirlsOnCourt?: number;
-    isDraggingFromCourt?: boolean;
+    canDropOnId: (id: string) => boolean;
 }
 
-export function SubBench({ 
-    subs, 
-    side, 
-    onSubClick, 
-    onAddSub, 
-    canAddSubs, 
+export function SubBench({
+    subs,
+    side,
+    onSubClick,
+    onAddSub,
+    canAddSubs,
     draggingPlayerId,
-    draggingPlayer,
-    minGirls = 0,
-    currentGirlsOnCourt = 0,
-    isDraggingFromCourt = false,
+    canDropOnId,
 }: SubBenchProps) {
     // Get subs that have players
     const filledSubs = subs.filter((sub) => sub.player !== null);
     const canAddMore = canAddSubs && filledSubs.length < 4;
 
-    // Check if swapping the dragged player with a sub would violate min girls
-    const isValidSwapTarget = (subPlayer: Player | null) => {
-        if (!isDraggingFromCourt || !draggingPlayer) return true;
-        
-        // If dragged player is female and sub is not, check if it violates min girls
-        if (draggingPlayer.gender === 'female' && subPlayer?.gender !== 'female') {
-            return currentGirlsOnCourt - 1 >= minGirls;
-        }
-        return true;
-    };
-
     return (
         <div className={`sub-bench ${side}`}>
-            <div className="sub-bench-label">SUBS</div>
+            <div className="sub-bench-label">BENCH</div>
             <div className="sub-slots">
                 {filledSubs.map((sub, index) => {
                     const isBeingDragged = draggingPlayerId && sub.player?.id === draggingPlayerId;
-                    const isValidDrop = isValidSwapTarget(sub.player);
+                    const isValidDrop = canDropOnId(`sub-${side}-${index}`);
                     return (
                         <DraggablePlayerSlot
                             key={`${side}-${index}`}
