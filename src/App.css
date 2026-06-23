@@ -52,11 +52,14 @@ body {
   font-size: 2.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--accent-primary), #50fa7b);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
+}
+
+/* Opt the emoji out of the gradient text-fill so it renders in full colour. */
+.header-emoji {
+  -webkit-text-fill-color: initial;
+  color: initial;
 }
 
 .header p {
@@ -75,6 +78,7 @@ body {
 
 .lineup-tab {
   padding: 0.5rem 1rem;
+  text-align: center;
   background: var(--bg-secondary);
   border: 1px solid var(--bg-tertiary);
   border-radius: var(--radius-sm);
@@ -82,7 +86,14 @@ body {
   font-size: 0.85rem;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
+}
+
+/* The active tab acting as the share button: shrink the longer label to keep
+   the tab the same size as the numbered ones. */
+.lineup-tab.lineup-tab-share {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.5rem;
 }
 
 .lineup-tab:hover {
@@ -104,8 +115,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
   width: 100%;
+  margin-bottom: 0.5rem;
 }
 
 /* A single row of up to STEPS_PER_ROW circles. */
@@ -207,7 +219,7 @@ body {
 
 /* ===== COURT ===== */
 .court {
-  background: linear-gradient(180deg, var(--court-bg) 0%, #121e1c 100%);
+  background: var(--court-bg);
   border-radius: var(--radius);
   position: relative;
   box-shadow: var(--shadow);
@@ -560,7 +572,7 @@ body {
   text-align: center;
   font-weight: 700;
   font-size: 0.95rem;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   margin: 0 0.5rem;
 }
 
@@ -814,7 +826,7 @@ body {
 
 .btn-save {
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  background: var(--accent-primary);
   border: none;
   border-radius: var(--radius-sm);
   color: var(--bg-primary);
@@ -914,6 +926,21 @@ body {
   box-shadow: var(--shadow);
   /* Never intercept pointer/drag events. */
   pointer-events: none;
+}
+
+/* Success variant (e.g. "Link copied!"). */
+.toast-container.success .toast {
+  background: #1d2b27;
+  border-color: var(--accent-primary);
+}
+
+/* Larger, more legible toast on bigger screens. */
+@media (min-width: 768px) {
+  .toast {
+    padding: 0.85rem 1.5rem;
+    font-size: 0.95rem;
+    border-radius: var(--radius);
+  }
 }
 
 /* ===== RESPONSIVE ===== */
@@ -1051,7 +1078,6 @@ body {
   .rotation-tracker {
     --step-size: 1.7rem;
     --connector: 1rem;
-    gap: 0.7rem;
   }
 
   .rotation-step {
@@ -1258,7 +1284,6 @@ body {
   .rotation-tracker {
     --step-size: 1.5rem;
     --connector: 0.6rem;
-    gap: 0.6rem;
   }
 
   .rotation-step {

@@ -1,6 +1,7 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import type { Player } from '../types';
-import { POSITION_COLORS, POSITION_ABBREV } from '../types';
+import { POSITION_ABBREV } from '../types';
+import { useSettings } from '../config';
 
 interface DraggablePlayerSlotProps {
   id: string;
@@ -37,7 +38,8 @@ export function DraggablePlayerSlot({
     data: { player, slotId: id },
   });
 
-  const positionColor = player?.position ? POSITION_COLORS[player.position] : '#4a5568';
+  const { colors } = useSettings();
+  const positionColor = player?.position ? colors.positions[player.position] : '#4a5568';
 
   // Combine refs
   const setRefs = (node: HTMLDivElement | null) => {

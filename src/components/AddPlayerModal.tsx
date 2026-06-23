@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Player, Position, Gender } from '../types';
-import { POSITION_COLORS, POSITION_LABELS } from '../types';
+import { POSITION_LABELS } from '../types';
+import { useSettings } from '../config';
 
 interface AddPlayerModalProps {
     isOpen: boolean;
@@ -27,6 +28,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
     const [name, setName] = useState(existingPlayer?.name || '');
     const [position, setPosition] = useState<Position | null>(existingPlayer?.position || null);
     const [gender, setGender] = useState<Gender>(existingPlayer?.gender || 'male');
+    const { colors } = useSettings();
 
     if (!isOpen) return null;
 
@@ -92,8 +94,8 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                                 onClick={() => setPosition(position === pos ? null : pos)}
                                 disabled={disabled}
                                 style={{
-                                    '--position-color': POSITION_COLORS[pos],
-                                    backgroundColor: position === pos ? POSITION_COLORS[pos] : undefined,
+                                    '--position-color': colors.positions[pos],
+                                    backgroundColor: position === pos ? colors.positions[pos] : undefined,
                                 } as React.CSSProperties}
                             >
                                 {POSITION_LABELS[pos]}

@@ -1,8 +1,64 @@
 import { createContext, useContext } from 'react';
 import type { Lineup, Phase } from './App';
+import type { Position } from './types';
+import { POSITION_COLORS } from './types';
 
 /** The app always fields a full volleyball lineup of six players on court. */
 export const PLAYER_COUNT = 6;
+
+/** The full overridable colour scheme. */
+export interface ColorScheme {
+  bgPrimary: string;
+  bgSecondary: string;
+  bgTertiary: string;
+  courtBg: string;
+  courtLines: string;
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  accentPrimary: string;
+  accentSecondary: string;
+  male: string;
+  female: string;
+  danger: string;
+  /** Per-position swatch colours. */
+  positions: Record<Position, string>;
+}
+
+// Maps each ColorScheme key to the CSS custom property it drives. `positions` is
+// applied separately (inline, per player), so it's not in this table.
+export const COLOR_CSS_VARS: Record<Exclude<keyof ColorScheme, 'positions'>, string> = {
+  bgPrimary: '--bg-primary',
+  bgSecondary: '--bg-secondary',
+  bgTertiary: '--bg-tertiary',
+  courtBg: '--court-bg',
+  courtLines: '--court-lines',
+  textPrimary: '--text-primary',
+  textSecondary: '--text-secondary',
+  textMuted: '--text-muted',
+  accentPrimary: '--accent-primary',
+  accentSecondary: '--accent-secondary',
+  male: '--male-color',
+  female: '--female-color',
+  danger: '--danger',
+};
+
+const DEFAULT_COLORS: ColorScheme = {
+  bgPrimary: '#0f1419',
+  bgSecondary: '#1a1f2e',
+  bgTertiary: '#252d3d',
+  courtBg: '#162322',
+  courtLines: '#1e3a36',
+  textPrimary: '#f0f4f8',
+  textSecondary: '#8899a6',
+  textMuted: '#657786',
+  accentPrimary: '#00d4aa',
+  accentSecondary: '#00b894',
+  male: '#4dabf7',
+  female: '#f06595',
+  danger: '#e74c3c',
+  positions: POSITION_COLORS,
+};
 
 /**
  * A custom rotation-validity check. Receives the same arguments as the built-in
@@ -48,6 +104,8 @@ export interface LineupSettings {
   };
   /** Maximum number of players allowed on each side bench. */
   maxSizePerBench: number;
+  /** Maximum number of players allowed on the roster. */
+  maxRosterSize: number;
   /** How many independent lineup tabs to show. */
   numLineups: number;
   /**
@@ -55,13 +113,17 @@ export interface LineupSettings {
    * separate per rotation method (only the active method's validators run).
    */
   validators: MethodValidators;
+  /** Overridable colour scheme (CSS variables + per-position swatches). */
+  colors: ColorScheme;
 }
 
 export const DEFAULT_SETTINGS: LineupSettings = {
   minGirls: { default: 2, min: 0, autoFulfill: true, editable: true },
   maxSizePerBench: 3,
+  maxRosterSize: 13,
   numLineups: 6,
   validators: { bench: [], substitutions: [] },
+  colors: DEFAULT_COLORS,
 };
 
 /**
@@ -81,8 +143,14 @@ export function resolveSettings(
     : {
       minGirls: { ...DEFAULT_SETTINGS.minGirls, ...overrides.minGirls },
       maxSizePerBench: overrides.maxSizePerBench ?? DEFAULT_SETTINGS.maxSizePerBench,
+      maxRosterSize: overrides.maxRosterSize ?? DEFAULT_SETTINGS.maxRosterSize,
       numLineups: overrides.numLineups ?? DEFAULT_SETTINGS.numLineups,
       validators: { ...DEFAULT_SETTINGS.validators, ...overrides.validators },
+      colors: {
+        ...DEFAULT_SETTINGS.colors,
+        ...overrides.colors,
+        positions: { ...DEFAULT_SETTINGS.colors.positions, ...overrides.colors?.positions },
+      },
     };
   validateSettings(settings);
   return settings;

@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import type { Player } from './types';
-import { POSITION_COLORS, POSITION_ABBREV } from './types';
+import { POSITION_ABBREV } from './types';
 import type { DeepPartial, LineupSettings, MethodValidators } from './config';
-import { SettingsContext, resolveSettings, PLAYER_COUNT } from './config';
+import { SettingsContext, resolveSettings, DEFAULT_SETTINGS, COLOR_CSS_VARS, PLAYER_COUNT } from './config';
 import { Court } from './components/Court';
 import { Bench } from './components/Bench';
+import { buildShareUrl, readSharedLineup, clearShareParam } from './share';
+import type { ShareLineup } from './share';
 import { RotationTracker } from './components/RotationTracker';
 import { Toast } from './components/Toast';
 import { Controls } from './components/Controls';
@@ -25,7 +27,7 @@ type CourtSlot = {
   rotationalPosition?: number;
 };
 
-type Rotation = {
+export type Rotation = {
   court: CourtSlot[];
   leftBench: string[];
   rightBench: string[];
@@ -102,6 +104,11 @@ function createEmptyLineup(settings: LineupSettings): Lineup {
   };
 }
 
+// A lineup with no players - an unused slot, safe to import into without prompting.
+function isEmptyLineup(lineup: Lineup): boolean {
+  return Object.keys(lineup.roster).length === 0;
+}
+
 // Rotate a slot->position layout one step forward, mirroring how the court
 // players rotate (ROTATION_MAP). The label travels with the player to its new
 // slot, so a non-subbing player keeps the same number across rotations.
@@ -143,6 +150,17 @@ function assignRotationalPositions(lineup: Lineup): Lineup {
       if (c.playerId) positionByPlayer.set(c.playerId, layout[j]);
     });
 
+    // Receive keeps each player's serve number. A player subbed in only on
+    // receive isn't on the serve court, so it inherits the position of a player
+    // that's on serve but not receive (the one it replaced), paired in order.
+    const onReceive = new Set(r.receive.court.map((c) => c.playerId).filter(Boolean));
+    const replacedPositions = r.serve.court
+      .filter((c) => c.playerId && !onReceive.has(c.playerId))
+      .map((c) => positionByPlayer.get(c.playerId));
+    let nextReplaced = 0;
+    const receivePositionFor = (playerId: string): number | undefined =>
+      positionByPlayer.has(playerId) ? positionByPlayer.get(playerId) : replacedPositions[nextReplaced++];
+
     return {
       serve: {
         ...r.serve,
@@ -155,7 +173,7 @@ function assignRotationalPositions(lineup: Lineup): Lineup {
         ...r.receive,
         court: r.receive.court.map((c) => ({
           playerId: c.playerId,
-          rotationalPosition: c.playerId ? positionByPlayer.get(c.playerId) : undefined,
+          rotationalPosition: c.playerId ? receivePositionFor(c.playerId) : undefined,
         })),
       },
     };
@@ -214,10 +232,10 @@ function resolveRotationView(rotation: Rotation, roster: Record<string, Player>)
 
 // Resolve a rotation's ids to player objects for rendering / logic. A rotation
 // index past the end of the array (not built yet) resolves to an empty view.
-function resolveView(lineup: Lineup, rotationIndex: number, phase: Phase, validators?: MethodValidators): View {
+function resolveView(lineup: Lineup, rotationIndex: number, phase: Phase, settings?: LineupSettings): View {
   const view = lineup.rotations[rotationIndex]?.[phase];
   const resolved = view ? resolveRotationView(view, lineup.roster) : emptyView();
-  return { ...resolved, validation: validateRotation(lineup, rotationIndex, phase, validators) };
+  return { ...resolved, validation: validateRotation(lineup, rotationIndex, phase, settings) };
 }
 
 // Convert a resolved view back into id-based rotation data (players assumed to
@@ -333,10 +351,15 @@ function validateRotation(
   lineup: Lineup,
   rotationIndex: number,
   phase: Phase,
-  validators: MethodValidators = { bench: [], substitutions: [] },
+  settings: LineupSettings = DEFAULT_SETTINGS,
 ): ValidationContext {
   const messages: string[] = [];
   const court = lineup.rotations[rotationIndex]?.[phase]?.court;
+
+  // The roster may never exceed the configured maximum.
+  if (Object.keys(lineup.roster).length > settings.maxRosterSize) {
+    messages.push(`Roster cannot exceed ${settings.maxRosterSize} players`);
+  }
 
   // A full court must field at least `minGirls` females.
   if (court && court.every((c) => c.playerId)) {
@@ -356,13 +379,13 @@ function validateRotation(
   };
 
   if (lineup.rotationMethod === 'bench') {
-    runValidators(validators.bench);
+    runValidators(settings.validators.bench);
   }
 
   if (lineup.rotationMethod === 'substitutions') {
     const positionIssue = rotationalPositionViolation(lineup);
     if (positionIssue) messages.push(positionIssue);
-    runValidators(validators.substitutions);
+    runValidators(settings.validators.substitutions);
   }
 
   return { valid: messages.length === 0, messages };
@@ -636,6 +659,59 @@ function hydrateFrom(lineup: Lineup, startIndex: number, phase: Phase, autoFulfi
   return assignRotationalPositions({ ...lineup, roster: pruneRoster(lineup.roster, rotations), rotations });
 }
 
+// ----- Share encoding: store only rotations that aren't derivable from rot 0 -----
+
+// Every rotation the app would produce by cascading rotation 0 forward.
+function deriveAllFromFirst(lineup: Lineup, autoFulfill: boolean): Lineup['rotations'] {
+  if (lineup.rotations.length === 0) return [];
+  return hydrateFrom({ ...lineup, rotations: [lineup.rotations[0]] }, 0, 'serve', autoFulfill).rotations;
+}
+
+type RotationPair = Lineup['rotations'][number];
+
+// Compare two rotations by player placement only (rotationalPosition is derived).
+function sameRotation(a: RotationPair, b: RotationPair): boolean {
+  const idsEq = (x: string[], y: string[]) => x.length === y.length && x.every((v, i) => v === y[i]);
+  const sameForm = (x: Rotation, y: Rotation) =>
+    x.court.length === y.court.length &&
+    x.court.every((c, i) => c.playerId === y.court[i].playerId) &&
+    idsEq(x.leftBench, y.leftBench) &&
+    idsEq(x.rightBench, y.rightBench) &&
+    idsEq(x.liberoBench, y.liberoBench) &&
+    idsEq(x.subsBench, y.subsBench);
+  return sameForm(a.serve, b.serve) && sameForm(a.receive, b.receive);
+}
+
+// Drop rotations equal to what rotation 0 would derive; keep custom ones.
+function minimizeLineup(lineup: Lineup, autoFulfill: boolean): ShareLineup {
+  const derived = deriveAllFromFirst(lineup, autoFulfill);
+  return {
+    minGirls: lineup.minGirls,
+    rotationMethod: lineup.rotationMethod,
+    roster: lineup.roster,
+    rotations: lineup.rotations.map((r, i) =>
+      i > 0 && derived[i] && sameRotation(r, derived[i]) ? null : { serve: r.serve, receive: r.receive },
+    ),
+  };
+}
+
+// Rebuild a full lineup: derive from rotation 0, overlay the explicit rotations,
+// then recompute rotational positions.
+function expandLineup(share: ShareLineup, autoFulfill: boolean): Lineup {
+  const first = share.rotations[0];
+  const base: Lineup = {
+    minGirls: share.minGirls,
+    rotationMethod: share.rotationMethod,
+    roster: share.roster,
+    rotations: [first ?? { serve: createEmptyRotation(), receive: createEmptyRotation() }],
+  };
+  const derived = deriveAllFromFirst(base, autoFulfill);
+  const rotations = share.rotations
+    .map((r, i) => r ?? derived[i])
+    .filter((r): r is RotationPair => !!r);
+  return assignRotationalPositions({ ...base, rotations });
+}
+
 interface AppProps {
   /** Override any subset of the default settings (e.g. when used as a package). */
   settings?: DeepPartial<LineupSettings>;
@@ -645,9 +721,31 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // Merge + validate consumer overrides exactly once, on first mount.
   const [settings] = useState(() => resolveSettings(settingsOverride));
 
-  // Load all lineups from localStorage
-  const [activeLineupIndex, setActiveLineupIndex] = useState(() => loadActiveIndex());
-  const [lineups, setLineups] = useState<Lineup[]>(() => loadFromStorage(settings));
+  // Compute the initial state once. A lineup shared via the URL is imported into
+  // the first empty slot; if every slot is in use, it's queued (pendingShare) so
+  // the user can confirm clearing one.
+  const [boot] = useState(() => {
+    const stored = loadFromStorage(settings);
+    const activeIndex = loadActiveIndex();
+    const shared = readSharedLineup();
+    const imported = shared ? expandLineup(shared, settings.minGirls.autoFulfill) : null;
+    if (!imported) return { lineups: stored, activeIndex, pending: null as Lineup | null };
+
+    const emptyIndex = stored.findIndex(isEmptyLineup);
+    if (emptyIndex >= 0) {
+      return {
+        lineups: stored.map((lineup, i) => (i === emptyIndex ? imported : lineup)),
+        activeIndex: emptyIndex,
+        pending: null as Lineup | null,
+      };
+    }
+    // No free slot - keep existing data and ask before overwriting one.
+    return { lineups: stored, activeIndex, pending: imported };
+  });
+
+  const [activeLineupIndex, setActiveLineupIndex] = useState(boot.activeIndex);
+  const [lineups, setLineups] = useState<Lineup[]>(boot.lineups);
+  const [pendingShare, setPendingShare] = useState<Lineup | null>(boot.pending);
 
   // Which rotation/phase is currently being viewed and edited.
   const [activeRotation, setActiveRotation] = useState(0);
@@ -659,11 +757,11 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const { minGirls, roster, rotationMethod } = currentLineup;
 
   // Resolve the active rotation to player objects for the UI / drag logic.
-  const { court, leftBench, rightBench, liberoBench, subsBench, validation } = resolveView(currentLineup, activeRotation, activePhase, settings.validators);
+  const { court, leftBench, rightBench, liberoBench, subsBench, validation } = resolveView(currentLineup, activeRotation, activePhase, settings);
   const courtRotationalPositions = currentLineup.rotations[activeRotation]?.[activePhase]?.court.map((c) => c.rotationalPosition) ?? [];
 
   // Per-rotation validity for the tracker (red border on invalid rotations).
-  const rotationValidity = currentLineup.rotations.map((_, i) => validateRotation(currentLineup, i, activePhase, settings.validators).valid);
+  const rotationValidity = currentLineup.rotations.map((_, i) => validateRotation(currentLineup, i, activePhase, settings).valid);
 
   // Players can only be added/edited/removed from the first rotation (both
   // methods). For the bench method, swaps are also locked on later rotations -
@@ -689,8 +787,8 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // phase so problems are visible. Default to serve (incl. when both are invalid
   // or both valid); only switch to receive when serve is valid but receive isn't.
   const preferredPhase = (index: number): Phase => {
-    const serveValid = validateRotation(currentLineup, index, 'serve', settings.validators).valid;
-    const receiveValid = validateRotation(currentLineup, index, 'receive', settings.validators).valid;
+    const serveValid = validateRotation(currentLineup, index, 'serve', settings).valid;
+    const receiveValid = validateRotation(currentLineup, index, 'receive', settings).valid;
     return serveValid && !receiveValid ? 'receive' : 'serve';
   };
 
@@ -698,6 +796,16 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     setActiveRotation(index);
     setActivePhase(preferredPhase(index));
   };
+
+  // Confirm overwriting the active lineup with a shared one (no slots were free).
+  const handleImportConfirm = () => {
+    if (!pendingShare) return;
+    setLineups((prev) => prev.map((lineup, i) => (i === activeLineupIndex ? pendingShare : lineup)));
+    setPendingShare(null);
+    viewRotation(0);
+  };
+
+  const handleImportCancel = () => setPendingShare(null);
 
   // minGirls affects how rotate-forward blocks female exits, so re-derive the
   // whole cascade from the base rotation.
@@ -743,10 +851,36 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     saveToStorage(activeLineupIndex, lineups);
   }, [activeLineupIndex, lineups]);
 
+  useEffect(() => {
+    // The shared lineup (read in the initializer) was imported; strip the param so
+    // a refresh doesn't re-import it over later edits.
+    clearShareParam();
+
+    // Apply the (overridable) colour scheme to the document's CSS variables once on
+    // mount. `settings` is created once in a useState initializer and never changes.
+    const root = document.documentElement;
+    (Object.keys(COLOR_CSS_VARS) as (keyof typeof COLOR_CSS_VARS)[]).forEach((key) => {
+      root.style.setProperty(COLOR_CSS_VARS[key], settings.colors[key]);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Check if there are any players
   const hasPlayers = Object.keys(roster).length > 0;
 
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  // Copy a shareable URL (the whole lineup, compressed) to the clipboard.
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable (e.g. denied permissions) - nothing to do.
+    }
+  };
 
   // Reset all player data
   const handleResetClick = () => {
@@ -769,6 +903,9 @@ function App({ settings: settingsOverride }: AppProps = {}) {
 
   // Check if all court slots are filled
   const isCourtFull = court.every((player) => player !== null);
+
+  // No more players can be added once the roster hits its configured maximum.
+  const isRosterFull = Object.keys(roster).length >= settings.maxRosterSize;
 
   // Players can only be configured from rotation 1; later rotations are derived.
   const handleSlotClick = (slotIndex: number) => {
@@ -972,8 +1109,10 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     const liberoInvolved = sourceIsLibero || targetIsLibero;
     const liberoBenchInvolved = source.type === 'libero' || target.type === 'libero';
 
-    // On a locked (non-first bench) rotation, only libero replacements are allowed.
-    if (isSwapLocked && !liberoInvolved) {
+    // On a locked (non-first bench) rotation, only libero replacements via the
+    // libero bench are allowed. Swapping two on-court players (even if one is the
+    // libero) still changes the rotation order, so it stays locked.
+    if (isSwapLocked && !liberoBenchInvolved) {
       return 'Order can only be changed from R1';
     }
 
@@ -1009,7 +1148,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
       activePhase,
       settings.minGirls.autoFulfill,
     );
-    const { valid, messages } = validateRotation(after, activeRotation, activePhase, settings.validators);
+    const { valid, messages } = validateRotation(after, activeRotation, activePhase, settings);
     if (!valid) return messages[0];
 
     return null;
@@ -1095,7 +1234,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const renderDragOverlay = () => {
     if (!activeDragPlayer) return null;
 
-    const positionColor = activeDragPlayer.position ? POSITION_COLORS[activeDragPlayer.position] : '#4a5568';
+    const positionColor = activeDragPlayer.position ? settings.colors.positions[activeDragPlayer.position] : '#4a5568';
 
     return (
       <div
@@ -1114,11 +1253,6 @@ function App({ settings: settingsOverride }: AppProps = {}) {
           </div>
         )}
         <span className="player-name">{activeDragPlayer.name}</span>
-        {activeId?.startsWith('court-') && (
-          <span className="player-gender-label">
-            {activeDragPlayer.gender === 'female' ? '(F)' : '(M)'}
-          </span>
-        )}
       </div>
     );
   };
@@ -1127,35 +1261,46 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     <SettingsContext.Provider value={settings}>
       <div className="app">
         <header className="header">
-          <h1>Volleyball Lineup</h1>
+          <h1><span className="header-emoji">🏐</span> Lineup Simulator</h1>
         </header>
 
         <div className="lineup-tabs">
-          {lineups.map((_, index) => (
-            <button
-              key={index}
-              className={`lineup-tab ${index === activeLineupIndex ? 'active' : ''}`}
-              onClick={() => {
-                setActiveLineupIndex(index);
-                viewRotation(0);
-              }}
-            >
-              L{index + 1}
-            </button>
-          ))}
+          {lineups.map((_, index) => {
+            const isActive = index === activeLineupIndex;
+            // The active tab doubles as the share button (once it has players).
+            if (isActive && hasPlayers) {
+              return (
+                <button key={index} className="lineup-tab active lineup-tab-share" onClick={handleShare}>
+                  Share
+                </button>
+              );
+            }
+            return (
+              <button
+                key={index}
+                className={`lineup-tab ${isActive ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveLineupIndex(index);
+                  viewRotation(0);
+                }}
+              >
+                L{index + 1}
+              </button>
+            );
+          })}
         </div>
 
         <main className="main">
-          <RotationTracker
-            count={rotationCount}
-            activeIndex={activeRotation}
-            onSelect={viewRotation}
-            validity={rotationValidity}
-          />
           {validation && !validation.valid && (
             <Toast messages={validation.messages} />
           )}
           <div className="container">
+            <RotationTracker
+              count={rotationCount}
+              activeIndex={activeRotation}
+              onSelect={viewRotation}
+              validity={rotationValidity}
+            />
             <DndContext
               sensors={sensors}
               onDragStart={handleDragStart}
@@ -1174,7 +1319,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                     onSlotClick={(i) => handleBenchClick('left', i)}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && leftBench.length < settings.maxSizePerBench}
+                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && leftBench.length < settings.maxSizePerBench}
                     onAdd={() => handleAddBench('left')}
                   />
                 )}
@@ -1200,7 +1345,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                     onSlotClick={(i) => handleBenchClick('right', i)}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && rightBench.length < settings.maxSizePerBench}
+                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && rightBench.length < settings.maxSizePerBench}
                     onAdd={() => handleAddBench('right')}
                   />
                 )}
@@ -1216,7 +1361,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                     onSlotClick={handleLiberoClick}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && !liberoBench}
+                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && !liberoBench}
                     onAdd={handleLiberoClick}
                   />
                 </div>
@@ -1230,7 +1375,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                     onSlotClick={handleSubClick}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && subsBench.length < settings.maxSizePerBench * 2 && !isModalLocked}
+                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && subsBench.length < settings.maxSizePerBench * 2}
                     onAdd={handleAddSub}
                   />
                 )}
@@ -1283,9 +1428,34 @@ function App({ settings: settingsOverride }: AppProps = {}) {
           </div>
         )}
 
+        {/* Shared-lineup Import Confirmation (no empty slots available) */}
+        {pendingShare && (
+          <div className="modal-overlay" onClick={handleImportCancel}>
+            <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={handleImportCancel}>×</button>
+              <h2>Import shared lineup?</h2>
+              <p className="confirm-message">
+                All lineup slots are in use. Importing will replace Lineup {activeLineupIndex + 1} and clear its
+                current players. This cannot be undone.
+              </p>
+              <div className="confirm-actions">
+                <button className="btn-confirm-reset" onClick={handleImportConfirm}>
+                  Replace Lineup {activeLineupIndex + 1}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {dragToast && (
           <div className="toast-container" role="status">
             <Toast messages={dragToast} />
+          </div>
+        )}
+
+        {shareCopied && (
+          <div className="toast-container success" role="status">
+            <Toast messages="Link copied!" />
           </div>
         )}
       </div>
