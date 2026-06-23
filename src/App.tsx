@@ -1,3 +1,7 @@
+/* This file co-locates the App component with its core lineup logic, which is
+   exported (at the bottom) for unit testing. That trips react-refresh's
+   "only export components" rule, which is a dev-only fast-refresh concern. */
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
@@ -1473,3 +1477,35 @@ function App({ settings: settingsOverride }: AppProps = {}) {
 }
 
 export default App;
+
+// Core (framework-agnostic) logic exported for unit testing.
+export {
+  COURT_ROTATIONAL_POSITIONS,
+  ROTATION_MAP,
+  SUB_POSITIONS,
+  createEmptyRotation,
+  createEmptyLineup,
+  isEmptyLineup,
+  rotateLayout,
+  assignRotationalPositions,
+  resolveRotationView,
+  resolveView,
+  viewToRotation,
+  fieldCount,
+  swapInView,
+  emptyView,
+  cloneRotation,
+  rotateView,
+  liberoServeViolation,
+  rotationalPositionViolation,
+  validateRotation,
+  pruneRoster,
+  writeView,
+  hydrateFrom,
+  deriveAllFromFirst,
+  sameRotation,
+  minimizeLineup,
+  expandLineup,
+  generateId,
+};
+export type { View, SlotRef, CourtSlot, ValidationContext };
