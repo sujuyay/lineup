@@ -544,6 +544,44 @@ body {
   cursor: not-allowed;
 }
 
+/* Rotation method toggle */
+.method-toggle {
+  display: flex;
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.method-option {
+  padding: 0.4rem 0.85rem;
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.method-option:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+.method-option.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.method-subtext {
+  margin-top: 0.5rem;
+  max-width: 260px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .btn-reset {
   margin-top: 0.5rem;
   padding: 0.6rem 1.25rem;
@@ -616,6 +654,17 @@ body {
   color: var(--text-primary);
 }
 
+.modal-disabled-note {
+  margin-bottom: 1.25rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 .form-group {
   margin-bottom: 1.5rem;
 }
@@ -673,9 +722,16 @@ body {
   transition: all 0.2s ease;
 }
 
-.gender-btn:hover,
-.position-btn:hover {
+.gender-btn:hover:not(:disabled),
+.position-btn:hover:not(:disabled) {
   background: var(--bg-primary);
+}
+
+.gender-btn:disabled,
+.position-btn:disabled,
+.form-group input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .gender-btn {
@@ -797,19 +853,23 @@ body {
 }
 
 /* ===== DRAG TOAST ===== */
-.drag-toast {
+.drag-toast-container {
   position: fixed;
   top: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 1rem;
+  right: 1rem;
   z-index: 2000;
-  max-width: 90vw;
+  display: flex;
+  justify-content: center;
+}
+
+.drag-toast {
   padding: 0.65rem 1.1rem;
-  background: var(--bg-tertiary);
+  background: #2f242f;
   border: 1px solid var(--danger);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   text-align: center;
   box-shadow: var(--shadow);
   /* Never intercept pointer/drag events. */

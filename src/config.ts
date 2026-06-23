@@ -27,7 +27,7 @@ export interface LineupSettings {
 
 export const DEFAULT_SETTINGS: LineupSettings = {
   minGirls: { default: 2, min: 0 },
-  maxSizePerBench: 4,
+  maxSizePerBench: 3,
   numLineups: 6,
 };
 
@@ -43,10 +43,10 @@ export function resolveSettings(
   const settings: LineupSettings = !overrides
     ? DEFAULT_SETTINGS
     : {
-        minGirls: { ...DEFAULT_SETTINGS.minGirls, ...overrides.minGirls },
-        maxSizePerBench: overrides.maxSizePerBench ?? DEFAULT_SETTINGS.maxSizePerBench,
-        numLineups: overrides.numLineups ?? DEFAULT_SETTINGS.numLineups,
-      };
+      minGirls: { ...DEFAULT_SETTINGS.minGirls, ...overrides.minGirls },
+      maxSizePerBench: overrides.maxSizePerBench ?? DEFAULT_SETTINGS.maxSizePerBench,
+      numLineups: overrides.numLineups ?? DEFAULT_SETTINGS.numLineups,
+    };
   validateSettings(settings);
   return settings;
 }
@@ -60,7 +60,7 @@ export function validateSettings({ minGirls }: LineupSettings): void {
   if (minGirls.default < minGirls.min || minGirls.default > PLAYER_COUNT) {
     throw new RangeError(
       `Invalid settings: minGirls.default (${minGirls.default}) must be between ` +
-        `minGirls.min (${minGirls.min}) and PLAYER_COUNT (${PLAYER_COUNT}).`
+      `minGirls.min (${minGirls.min}) and PLAYER_COUNT (${PLAYER_COUNT}).`
     );
   }
 }

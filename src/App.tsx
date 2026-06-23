@@ -18,13 +18,24 @@ const STORAGE_KEY = 'volleyball-lineup-data-v3';
 // All ids below are player ids that key into the lineup's `roster`. Empty string
 // means "no player". Court is a fixed-length array (one entry per court slot);
 // benches are variable-length and only hold filled positions.
+type CourtSlot = {
+  playerId: string;
+  // 1-6, only set for the substitutions method. Seeded by the first rotation's
+  // court index and stays with the player as they rotate around the court.
+  rotationalPosition?: number;
+};
+
 type Rotation = {
-  court: string[];
+  court: CourtSlot[];
   leftBench: string[];
   rightBench: string[];
-  liberoBench: string;
+  liberoBench: string[]; // for now always 0 or 1 element
   subsBench: string[];
 };
+
+// rotationalPosition seeded by the first rotation's court index:
+//   front: left=4 middle=3 right=2   back: left=5 middle=6 right=1
+const COURT_ROTATIONAL_POSITIONS = [4, 3, 2, 5, 6, 1];
 
 interface Lineup {
   minGirls: number;
@@ -61,10 +72,10 @@ type View = {
 
 function createEmptyRotation(): Rotation {
   return {
-    court: Array.from({ length: PLAYER_COUNT }, () => ''),
+    court: Array.from({ length: PLAYER_COUNT }, () => ({ playerId: '' })),
     leftBench: [],
     rightBench: [],
-    liberoBench: '',
+    liberoBench: [],
     subsBench: [],
   };
 }
@@ -78,28 +89,41 @@ function createEmptyLineup(settings: LineupSettings): Lineup {
   };
 }
 
-// Defensive normalization so malformed/partial stored data can't crash the app.
-function normalizeRotation(r: Partial<Rotation> | undefined): Rotation {
-  const court = Array.isArray(r?.court) ? r!.court.slice(0, PLAYER_COUNT) : [];
-  while (court.length < PLAYER_COUNT) court.push('');
-  return {
-    court,
-    leftBench: Array.isArray(r?.leftBench) ? r!.leftBench : [],
-    rightBench: Array.isArray(r?.rightBench) ? r!.rightBench : [],
-    liberoBench: typeof r?.liberoBench === 'string' ? r!.liberoBench : '',
-    subsBench: Array.isArray(r?.subsBench) ? r!.subsBench : [],
-  };
-}
+// For the substitutions method each court object carries a rotationalPosition
+// (1-6) that follows the player: positions are seeded by the first rotation's
+// court index, and every other rotation reuses the same player's position. Bench
+// lineups carry no positions.
+function assignRotationalPositions(lineup: Lineup): Lineup {
+  const applyPositions = (rot: Rotation, positionFor: (playerId: string) => number | undefined): Rotation => ({
+    ...rot,
+    court: rot.court.map((c) => ({
+      playerId: c.playerId,
+      rotationalPosition: c.playerId ? positionFor(c.playerId) : undefined,
+    })),
+  });
 
-function normalizeLineup(lineup: Partial<Lineup> | undefined, settings: LineupSettings): Lineup {
-  const rotations = Array.isArray(lineup?.rotations) && lineup!.rotations.length > 0
-    ? lineup!.rotations.map((r) => ({ serve: normalizeRotation(r?.serve), receive: normalizeRotation(r?.receive) }))
-    : [{ serve: createEmptyRotation(), receive: createEmptyRotation() }];
+  if (lineup.rotationMethod !== 'substitutions') {
+    return {
+      ...lineup,
+      rotations: lineup.rotations.map((r) => ({
+        serve: applyPositions(r.serve, () => undefined),
+        receive: applyPositions(r.receive, () => undefined),
+      })),
+    };
+  }
+
+  const positionByPlayer = new Map<string, number>();
+  lineup.rotations[0]?.serve.court.forEach((c, i) => {
+    if (c.playerId) positionByPlayer.set(c.playerId, COURT_ROTATIONAL_POSITIONS[i]);
+  });
+  const positionFor = (playerId: string) => positionByPlayer.get(playerId);
+
   return {
-    minGirls: typeof lineup?.minGirls === 'number' ? lineup!.minGirls : settings.minGirls.default,
-    rotationMethod: lineup?.rotationMethod === 'substitutions' ? 'substitutions' : 'bench',
-    roster: lineup && typeof lineup.roster === 'object' && lineup.roster ? lineup.roster : {},
-    rotations,
+    ...lineup,
+    rotations: lineup.rotations.map((r) => ({
+      serve: applyPositions(r.serve, positionFor),
+      receive: applyPositions(r.receive, positionFor),
+    })),
   };
 }
 
@@ -120,10 +144,10 @@ function writeView(lineup: Lineup, next: View, rotationIndex: number, phase: Pha
 
   const prevView = rotations[rotationIndex][phase];
   const newView: Rotation = {
-    court: next.court.map((p) => (p ? register(p) : '')),
+    court: next.court.map((p) => ({ playerId: p ? register(p) : '' })),
     leftBench: next.leftSubs.map(register),
     rightBench: next.rightSubs.map(register),
-    liberoBench: next.libero ? register(next.libero) : '',
+    liberoBench: next.libero ? [register(next.libero)] : [],
     subsBench: prevView.subsBench,
   };
 
@@ -139,11 +163,12 @@ function emptyView(): View {
 
 // Resolve a single rotation's ids to player objects.
 function resolveRotationView(rotation: Rotation, roster: Record<string, Player>): View {
+  const liberoId = rotation.liberoBench[0];
   return {
-    court: rotation.court.map((id) => roster[id] ?? null),
+    court: rotation.court.map((c) => roster[c.playerId] ?? null),
     leftSubs: rotation.leftBench.map((id) => roster[id]).filter((p): p is Player => !!p),
     rightSubs: rotation.rightBench.map((id) => roster[id]).filter((p): p is Player => !!p),
-    libero: rotation.liberoBench ? roster[rotation.liberoBench] ?? null : null,
+    libero: liberoId ? roster[liberoId] ?? null : null,
   };
 }
 
@@ -158,10 +183,10 @@ function resolveView(lineup: Lineup, rotationIndex: number, phase: Phase): View 
 // already live in the roster).
 function viewToRotation(view: View, subsBench: string[] = []): Rotation {
   return {
-    court: view.court.map((p) => (p ? p.id : '')),
+    court: view.court.map((p) => ({ playerId: p ? p.id : '' })),
     leftBench: view.leftSubs.map((p) => p.id),
     rightBench: view.rightSubs.map((p) => p.id),
-    liberoBench: view.libero ? view.libero.id : '',
+    liberoBench: view.libero ? [view.libero.id] : [],
     subsBench,
   };
 }
@@ -217,8 +242,8 @@ function liberoServeViolation(lineup: Lineup): string | null {
   let servedFor: string | null = null;
   for (const rotation of lineup.rotations) {
     const { serve } = rotation;
-    if (serve.court[serverIndex] !== liberoId) continue; // libero isn't serving here
-    const benchId = serve.liberoBench;
+    if (serve.court[serverIndex]?.playerId !== liberoId) continue; // libero isn't serving here
+    const benchId = serve.liberoBench[0];
     if (!benchId) continue;
     if (servedFor === null) servedFor = benchId;
     else if (servedFor !== benchId) return 'Libero can only serve for 1 player';
@@ -231,11 +256,11 @@ function pruneRoster(roster: Record<string, Player>, rotations: Lineup['rotation
   const referenced = new Set<string>();
   for (const r of rotations) {
     for (const phase of [r.serve, r.receive]) {
-      phase.court.forEach((id) => id && referenced.add(id));
+      phase.court.forEach((c) => c.playerId && referenced.add(c.playerId));
       phase.leftBench.forEach((id) => referenced.add(id));
       phase.rightBench.forEach((id) => referenced.add(id));
       phase.subsBench.forEach((id) => referenced.add(id));
-      if (phase.liberoBench) referenced.add(phase.liberoBench);
+      phase.liberoBench.forEach((id) => referenced.add(id));
     }
   }
   const pruned: Record<string, Player> = {};
@@ -251,7 +276,7 @@ function loadFromStorage(settings: LineupSettings): Lineup[] {
     if (stored) {
       const data = JSON.parse(stored) as StoredData;
       if (Array.isArray(data?.lineups)) {
-        const lineups = data.lineups.map((l) => normalizeLineup(l, settings));
+        const lineups = data.lineups.slice();
         while (lineups.length < settings.numLineups) {
           lineups.push(createEmptyLineup(settings));
         }
@@ -460,10 +485,10 @@ function rotateView(view: View, minGirls: number, direction: 'forward' | 'backwa
 
 function cloneRotation(r: Rotation): Rotation {
   return {
-    court: [...r.court],
+    court: r.court.map((c) => ({ ...c })),
     leftBench: [...r.leftBench],
     rightBench: [...r.rightBench],
-    liberoBench: r.liberoBench,
+    liberoBench: [...r.liberoBench],
     subsBench: [...r.subsBench],
   };
 }
@@ -490,7 +515,7 @@ function hydrateFrom(lineup: Lineup, startIndex: number, phase: Phase): Lineup {
     rotations.push({ serve: formation, receive: cloneRotation(formation) });
   }
 
-  return { ...lineup, roster: pruneRoster(lineup.roster, rotations), rotations };
+  return assignRotationalPositions({ ...lineup, roster: pruneRoster(lineup.roster, rotations), rotations });
 }
 
 interface AppProps {
@@ -512,10 +537,18 @@ function App({ settings: settingsOverride }: AppProps = {}) {
 
   // Get current lineup data
   const currentLineup = lineups[activeLineupIndex];
-  const { minGirls, roster } = currentLineup;
+  console.log("currentLineup", currentLineup)
+  const { minGirls, roster, rotationMethod } = currentLineup;
 
   // Resolve the active rotation to player objects for the UI / drag logic.
   const { court, leftSubs, rightSubs, libero } = resolveView(currentLineup, activeRotation, activePhase);
+
+  // Players can only be added/edited/removed from the first rotation (both
+  // methods). For the bench method, swaps are also locked on later rotations -
+  // the only allowed action there is a libero replacement.
+  const LOCK_MESSAGE = 'Lineup must be modified from rotation 1';
+  const isModalLocked = activeRotation > 0;
+  const isSwapLocked = rotationMethod === 'bench' && activeRotation > 0;
 
   // Transform the active rotation's resolved formation and write it back. Uses a
   // functional state update so multiple calls within one event compose.
@@ -541,6 +574,10 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const setMinGirls = (min: number) =>
     setLineups(prev => prev.map((lineup, i) =>
       i === activeLineupIndex ? hydrateFrom({ ...lineup, minGirls: min }, 0, 'serve') : lineup
+    ));
+  const setRotationMethod = (method: 'bench' | 'substitutions') =>
+    setLineups(prev => prev.map((lineup, i) =>
+      i === activeLineupIndex ? assignRotationalPositions({ ...lineup, rotationMethod: method }) : lineup
     ));
   const setCourt = (updater: (prev: (Player | null)[]) => (Player | null)[]) =>
     updateView(cur => ({ ...cur, court: updater(cur.court) }));
@@ -749,15 +786,20 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     const sourcePlayer = getPlayerFromSlot(source);
     const targetPlayer = getPlayerFromSlot(target);
 
-    // Court players can't be dropped onto empty bench spots
-    if (source.type === 'court' && target.type === 'sub' && !targetPlayer) {
-      return 'Empty bench spot';
-    }
-
     const sourceIsLibero = sourcePlayer?.position === 'libero';
     const targetIsLibero = targetPlayer?.position === 'libero';
     const liberoInvolved = sourceIsLibero || targetIsLibero;
     const liberoBenchInvolved = source.type === 'libero' || target.type === 'libero';
+
+    // On a locked (non-first bench) rotation, only libero replacements are allowed.
+    if (isSwapLocked && !liberoInvolved) {
+      return LOCK_MESSAGE;
+    }
+
+    // Court players can't be dropped onto empty bench spots
+    if (source.type === 'court' && target.type === 'sub' && !targetPlayer) {
+      return 'Empty bench spot';
+    }
 
     // Anything in/out of the libero bench has to involve the libero itself.
     if (liberoBenchInvolved && !liberoInvolved) {
@@ -992,6 +1034,8 @@ function App({ settings: settingsOverride }: AppProps = {}) {
             onMinGirlsChange={setMinGirls}
             onRotate={handleRotate}
             canRotate={rotationCount >= 6}
+            rotationMethod={rotationMethod}
+            onRotationMethodChange={setRotationMethod}
             onReset={handleResetClick}
             showReset={hasPlayers}
             lineupNumber={activeLineupIndex + 1}
@@ -1009,6 +1053,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
           onRemove={getCurrentPlayer() ? handleRemovePlayer : undefined}
           existingPlayer={getCurrentPlayer()}
           isLibero={editingSlot?.type === 'libero'}
+          disabledReason={isModalLocked ? LOCK_MESSAGE : undefined}
         />
 
         {/* Reset Confirmation Modal */}
@@ -1028,8 +1073,10 @@ function App({ settings: settingsOverride }: AppProps = {}) {
         )}
 
         {dragToast && (
-          <div className="drag-toast" role="status">
-            {dragToast}
+          <div className="drag-toast-container" role="status">
+            <div className="drag-toast">
+              {dragToast}
+            </div>
           </div>
         )}
       </div>

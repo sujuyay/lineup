@@ -10,6 +10,8 @@ interface AddPlayerModalProps {
     existingPlayer?: Player | null;
     /** When true, the player is a libero: position is forced and not selectable. */
     isLibero?: boolean;
+    /** When set, the modal is read-only and shows this message instead of saving. */
+    disabledReason?: string;
 }
 
 // 'libero' is intentionally omitted - it's only assigned via the libero slot.
@@ -19,7 +21,7 @@ function capitalizeWords(str: string): string {
     return str.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer, isLibero = false }: AddPlayerModalProps) {
+export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlayer, isLibero = false, disabledReason }: AddPlayerModalProps) {
     // The modal is remounted (via a `key`) each time it opens, so these
     // initializers seed the form from the player being edited.
     const [name, setName] = useState(existingPlayer?.name || '');
@@ -28,12 +30,14 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
 
     if (!isOpen) return null;
 
+    const disabled = !!disabledReason;
+
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setName(capitalizeWords(e.target.value));
     };
 
     const handleSave = () => {
-        if (!name.trim()) return;
+        if (disabled || !name.trim()) return;
         onSave({ name: name.trim(), position: isLibero ? 'libero' : position, gender });
     };
 
@@ -43,6 +47,8 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                 <button className="modal-close" onClick={onClose}>×</button>
                 <h2>{existingPlayer ? 'Edit Player' : 'Add Player'}</h2>
 
+                {disabled && <p className="modal-disabled-note">{disabledReason}</p>}
+
                 <div className="form-group">
                     <label>Name</label>
                     <input
@@ -50,7 +56,8 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                         value={name}
                         onChange={handleNameChange}
                         placeholder="Enter player name"
-                        autoFocus={!existingPlayer}
+                        autoFocus={!existingPlayer && !disabled}
+                        disabled={disabled}
                     />
                 </div>
 
@@ -60,12 +67,14 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                         <button
                             className={`gender-btn ${gender === 'male' ? 'active male' : ''}`}
                             onClick={() => setGender('male')}
+                            disabled={disabled}
                         >
                             ♂ Male
                         </button>
                         <button
                             className={`gender-btn ${gender === 'female' ? 'active female' : ''}`}
                             onClick={() => setGender('female')}
+                            disabled={disabled}
                         >
                             ♀ Female
                         </button>
@@ -81,6 +90,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                                 key={pos}
                                 className={`position-btn ${position === pos ? 'active' : ''}`}
                                 onClick={() => setPosition(position === pos ? null : pos)}
+                                disabled={disabled}
                                 style={{
                                     '--position-color': POSITION_COLORS[pos],
                                     backgroundColor: position === pos ? POSITION_COLORS[pos] : undefined,
@@ -93,6 +103,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                 </div>
                 )}
 
+                {!disabled && (
                 <div className="modal-actions">
                     {existingPlayer && onRemove ? (
                         <button className="btn-remove" onClick={onRemove}>
@@ -105,6 +116,7 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                         {existingPlayer ? 'Update' : 'Add'}
                     </button>
                 </div>
+                )}
             </div>
         </div>
     );

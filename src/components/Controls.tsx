@@ -5,6 +5,8 @@ interface ControlsProps {
     onMinGirlsChange: (min: number) => void;
     onRotate: (direction: 'forward' | 'backward') => void;
     canRotate: boolean;
+    rotationMethod: 'bench' | 'substitutions';
+    onRotationMethodChange: (method: 'bench' | 'substitutions') => void;
     onReset: () => void;
     showReset: boolean;
     lineupNumber: number;
@@ -15,6 +17,8 @@ export function Controls({
     onMinGirlsChange,
     onRotate,
     canRotate,
+    rotationMethod,
+    onRotationMethodChange,
     onReset,
     showReset,
     lineupNumber,
@@ -28,6 +32,31 @@ export function Controls({
                     <button onClick={() => onRotate('backward')} disabled={!canRotate}>&lt;</button>
                     <button onClick={() => onRotate('forward')} disabled={!canRotate}>&gt;</button>
                 </div>
+            </div>
+
+            <div className="control-group">
+                <label>Method</label>
+                <div className="method-toggle">
+                    <button
+                        type="button"
+                        className={`method-option ${rotationMethod === 'bench' ? 'active' : ''}`}
+                        onClick={() => onRotationMethodChange('bench')}
+                    >
+                        BENCH
+                    </button>
+                    <button
+                        type="button"
+                        className={`method-option ${rotationMethod === 'substitutions' ? 'active' : ''}`}
+                        onClick={() => onRotationMethodChange('substitutions')}
+                    >
+                        SUBS
+                    </button>
+                </div>
+                <p className="method-subtext">
+                    {rotationMethod === 'bench'
+                        ? 'All players rotate through the court and bench'
+                        : 'Only court players rotate and get replaced via substitution'}
+                </p>
             </div>
 
             <div className="control-group">
