@@ -356,17 +356,21 @@ function validateRotation(
   const messages: string[] = [];
   const court = lineup.rotations[rotationIndex]?.[phase]?.court;
 
+  // Only validate once the court is fully configured with 6 players; a partially
+  // filled court (e.g. mid-setup) is treated as valid.
+  if (!court || !court.every((c) => c.playerId)) {
+    return { valid: true, messages };
+  }
+
   // The roster may never exceed the configured maximum.
   if (Object.keys(lineup.roster).length > settings.maxRosterSize) {
     messages.push(`Roster cannot exceed ${settings.maxRosterSize} players`);
   }
 
-  // A full court must field at least `minGirls` females.
-  if (court && court.every((c) => c.playerId)) {
-    const courtFemales = court.filter((c) => lineup.roster[c.playerId]?.gender === 'female').length;
-    if (courtFemales < lineup.minGirls) {
-      messages.push(`Must have ${lineup.minGirls} female${lineup.minGirls === 1 ? '' : 's'} on court`);
-    }
+  // The court must field at least `minGirls` females.
+  const courtFemales = court.filter((c) => lineup.roster[c.playerId]?.gender === 'female').length;
+  if (courtFemales < lineup.minGirls) {
+    messages.push(`Must have ${lineup.minGirls} female${lineup.minGirls === 1 ? '' : 's'} on court`);
   }
 
   const liberoIssue = liberoServeViolation(lineup);
@@ -761,7 +765,12 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const courtRotationalPositions = currentLineup.rotations[activeRotation]?.[activePhase]?.court.map((c) => c.rotationalPosition) ?? [];
 
   // Per-rotation validity for the tracker (red border on invalid rotations).
-  const rotationValidity = currentLineup.rotations.map((_, i) => validateRotation(currentLineup, i, activePhase, settings).valid);
+  // A rotation is flagged invalid if either its serve or receive formation fails.
+  const rotationValidity = currentLineup.rotations.map(
+    (_, i) =>
+      validateRotation(currentLineup, i, 'serve', settings).valid &&
+      validateRotation(currentLineup, i, 'receive', settings).valid,
+  );
 
   // Players can only be added/edited/removed from the first rotation (both
   // methods). For the bench method, swaps are also locked on later rotations -
