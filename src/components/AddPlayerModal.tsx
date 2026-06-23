@@ -13,7 +13,7 @@ interface AddPlayerModalProps {
 }
 
 // 'libero' is intentionally omitted - it's only assigned via the libero slot.
-const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'middle_blocker'];
+const POSITIONS: Position[] = ['setter', 'outside_hitter', 'opposite_hitter', 'middle_blocker', 'defensive_specialist'];
 
 function capitalizeWords(str: string): string {
     return str.replace(/\b\w/g, (char) => char.toUpperCase());

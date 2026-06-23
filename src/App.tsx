@@ -1,25 +1,39 @@
 import { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import type { Player, CourtSlot, SubSlot } from './types';
+import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
+import type { Player } from './types';
 import { POSITION_COLORS, POSITION_ABBREV } from './types';
 import type { DeepPartial, LineupSettings } from './config';
 import { SettingsContext, resolveSettings, PLAYER_COUNT } from './config';
 import { Court } from './components/Court';
 import { SubBench } from './components/SubBench';
 import { LiberoBench } from './components/LiberoBench';
+import { RotationTracker } from './components/RotationTracker';
 import { Controls } from './components/Controls';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import './App.css';
 
-const STORAGE_KEY = 'volleyball-lineup-data-v2';
+const STORAGE_KEY = 'volleyball-lineup-data-v3';
+
+// All ids below are player ids that key into the lineup's `roster`. Empty string
+// means "no player". Court is a fixed-length array (one entry per court slot);
+// benches are variable-length and only hold filled positions.
+type Rotation = {
+  court: string[];
+  leftBench: string[];
+  rightBench: string[];
+  liberoBench: string;
+  subsBench: string[];
+};
 
 interface Lineup {
   minGirls: number;
-  courtSlots: CourtSlot[];
-  leftSubs: SubSlot[];
-  rightSubs: SubSlot[];
-  libero: Player | null;
+  rotationMethod: 'bench' | 'substitutions';
+  roster: Record<string, Player>;
+  rotations: {
+    serve: Rotation;
+    receive: Rotation;
+  }[];
 }
 
 interface StoredData {
@@ -27,46 +41,222 @@ interface StoredData {
   lineups: Lineup[];
 }
 
+type Phase = 'serve' | 'receive';
+
 // A reference to any draggable/droppable slot in the app.
 type SlotRef =
   | { type: 'court'; index: number }
   | { type: 'sub'; side: 'left' | 'right'; index: number }
   | { type: 'libero' };
 
-function createEmptyLineup(settings: LineupSettings): Lineup {
+// The active formation resolved to player objects - what the UI renders and the
+// drag/rotate logic operates on. Court entries may be null (empty slots); bench
+// entries are always filled.
+type View = {
+  court: (Player | null)[];
+  leftSubs: Player[];
+  rightSubs: Player[];
+  libero: Player | null;
+};
+
+function createEmptyRotation(): Rotation {
   return {
-    minGirls: settings.minGirls.default,
-    courtSlots: Array.from({ length: PLAYER_COUNT }, (_, i) => ({ player: null, slotIndex: i })),
-    leftSubs: [],
-    rightSubs: [],
-    libero: null,
+    court: Array.from({ length: PLAYER_COUNT }, () => ''),
+    leftBench: [],
+    rightBench: [],
+    liberoBench: '',
+    subsBench: [],
   };
 }
 
-function migrateLineup(lineup: Lineup): Lineup {
-  // Remove empty sub slots from old format - we now only store filled subs
-  lineup.leftSubs = lineup.leftSubs.filter(s => s.player !== null);
-  lineup.rightSubs = lineup.rightSubs.filter(s => s.player !== null);
-  // Older saved lineups predate the libero slot
-  lineup.libero = lineup.libero ?? null;
-  // Normalize to a fixed six-player court (older data could be 4 or 5)
-  const slots = (lineup.courtSlots ?? []).slice(0, PLAYER_COUNT);
-  while (slots.length < PLAYER_COUNT) slots.push({ player: null, slotIndex: slots.length });
-  lineup.courtSlots = slots.map((s, i) => ({ player: s.player, slotIndex: i }));
-  return lineup;
+function createEmptyLineup(settings: LineupSettings): Lineup {
+  return {
+    minGirls: settings.minGirls.default,
+    rotationMethod: 'bench',
+    roster: {},
+    rotations: [{ serve: createEmptyRotation(), receive: createEmptyRotation() }],
+  };
+}
+
+// Defensive normalization so malformed/partial stored data can't crash the app.
+function normalizeRotation(r: Partial<Rotation> | undefined): Rotation {
+  const court = Array.isArray(r?.court) ? r!.court.slice(0, PLAYER_COUNT) : [];
+  while (court.length < PLAYER_COUNT) court.push('');
+  return {
+    court,
+    leftBench: Array.isArray(r?.leftBench) ? r!.leftBench : [],
+    rightBench: Array.isArray(r?.rightBench) ? r!.rightBench : [],
+    liberoBench: typeof r?.liberoBench === 'string' ? r!.liberoBench : '',
+    subsBench: Array.isArray(r?.subsBench) ? r!.subsBench : [],
+  };
+}
+
+function normalizeLineup(lineup: Partial<Lineup> | undefined, settings: LineupSettings): Lineup {
+  const rotations = Array.isArray(lineup?.rotations) && lineup!.rotations.length > 0
+    ? lineup!.rotations.map((r) => ({ serve: normalizeRotation(r?.serve), receive: normalizeRotation(r?.receive) }))
+    : [{ serve: createEmptyRotation(), receive: createEmptyRotation() }];
+  return {
+    minGirls: typeof lineup?.minGirls === 'number' ? lineup!.minGirls : settings.minGirls.default,
+    rotationMethod: lineup?.rotationMethod === 'substitutions' ? 'substitutions' : 'bench',
+    roster: lineup && typeof lineup.roster === 'object' && lineup.roster ? lineup.roster : {},
+    rotations,
+  };
+}
+
+// Write a resolved View back into a lineup at the given rotation/phase:
+// registers the players into the roster, stores ids, and prunes unreferenced
+// players. Pads the rotations array with empty rotations up to `rotationIndex`.
+function writeView(lineup: Lineup, next: View, rotationIndex: number, phase: Phase): Lineup {
+  const roster: Record<string, Player> = { ...lineup.roster };
+  const register = (p: Player) => {
+    roster[p.id] = p;
+    return p.id;
+  };
+
+  const rotations = lineup.rotations.slice();
+  while (rotations.length <= rotationIndex) {
+    rotations.push({ serve: createEmptyRotation(), receive: createEmptyRotation() });
+  }
+
+  const prevView = rotations[rotationIndex][phase];
+  const newView: Rotation = {
+    court: next.court.map((p) => (p ? register(p) : '')),
+    leftBench: next.leftSubs.map(register),
+    rightBench: next.rightSubs.map(register),
+    liberoBench: next.libero ? register(next.libero) : '',
+    subsBench: prevView.subsBench,
+  };
+
+  rotations[rotationIndex] = { ...rotations[rotationIndex], [phase]: newView };
+
+  // Editing any rotation re-derives every rotation after it (predecessors stay).
+  return hydrateFrom({ ...lineup, roster, rotations }, rotationIndex, phase);
+}
+
+function emptyView(): View {
+  return { court: Array.from({ length: PLAYER_COUNT }, () => null), leftSubs: [], rightSubs: [], libero: null };
+}
+
+// Resolve a single rotation's ids to player objects.
+function resolveRotationView(rotation: Rotation, roster: Record<string, Player>): View {
+  return {
+    court: rotation.court.map((id) => roster[id] ?? null),
+    leftSubs: rotation.leftBench.map((id) => roster[id]).filter((p): p is Player => !!p),
+    rightSubs: rotation.rightBench.map((id) => roster[id]).filter((p): p is Player => !!p),
+    libero: rotation.liberoBench ? roster[rotation.liberoBench] ?? null : null,
+  };
+}
+
+// Resolve a rotation's ids to player objects for rendering / logic. A rotation
+// index past the end of the array (not built yet) resolves to an empty view.
+function resolveView(lineup: Lineup, rotationIndex: number, phase: Phase): View {
+  const view = lineup.rotations[rotationIndex]?.[phase];
+  return view ? resolveRotationView(view, lineup.roster) : emptyView();
+}
+
+// Convert a resolved view back into id-based rotation data (players assumed to
+// already live in the roster).
+function viewToRotation(view: View, subsBench: string[] = []): Rotation {
+  return {
+    court: view.court.map((p) => (p ? p.id : '')),
+    leftBench: view.leftSubs.map((p) => p.id),
+    rightBench: view.rightSubs.map((p) => p.id),
+    liberoBench: view.libero ? view.libero.id : '',
+    subsBench,
+  };
+}
+
+// Number of rotations a bench lineup cycles through: the players on court plus
+// both side benches (the libero bench is not counted).
+function fieldCount(view: View): number {
+  const onCourt = view.court.filter((p) => p !== null).length;
+  return onCourt + view.leftSubs.length + view.rightSubs.length;
+}
+
+// Swap the players occupying two slots within a view. Benches only hold filled
+// positions, so any emptied bench slot is dropped.
+function swapInView(view: View, a: SlotRef, b: SlotRef): View {
+  const court = [...view.court];
+  const left: (Player | null)[] = [...view.leftSubs];
+  const right: (Player | null)[] = [...view.rightSubs];
+  let libero = view.libero;
+
+  const read = (slot: SlotRef): Player | null => {
+    if (slot.type === 'court') return court[slot.index] ?? null;
+    if (slot.type === 'sub') return (slot.side === 'left' ? left : right)[slot.index] ?? null;
+    return libero;
+  };
+  const write = (slot: SlotRef, player: Player | null) => {
+    if (slot.type === 'court') court[slot.index] = player;
+    else if (slot.type === 'sub') (slot.side === 'left' ? left : right)[slot.index] = player;
+    else libero = player;
+  };
+
+  const playerA = read(a);
+  const playerB = read(b);
+  write(a, playerB);
+  write(b, playerA);
+
+  return {
+    court,
+    leftSubs: left.filter((p): p is Player => p !== null),
+    rightSubs: right.filter((p): p is Player => p !== null),
+    libero,
+  };
+}
+
+// The libero may only serve in place of a single player. Across every serve
+// formation where the libero occupies the server slot (back-right court), the
+// player it serves for (the one on the libero bench) must be the same. Returns
+// a message when the libero would serve for more than one player, else null.
+function liberoServeViolation(lineup: Lineup): string | null {
+  const liberoId = Object.values(lineup.roster).find((p) => p.position === 'libero')?.id;
+  if (!liberoId) return null;
+
+  const serverIndex = PLAYER_COUNT - 1;
+  let servedFor: string | null = null;
+  for (const rotation of lineup.rotations) {
+    const { serve } = rotation;
+    if (serve.court[serverIndex] !== liberoId) continue; // libero isn't serving here
+    const benchId = serve.liberoBench;
+    if (!benchId) continue;
+    if (servedFor === null) servedFor = benchId;
+    else if (servedFor !== benchId) return 'Libero can only serve for 1 player';
+  }
+  return null;
+}
+
+// Keep only roster entries still referenced by some rotation/phase.
+function pruneRoster(roster: Record<string, Player>, rotations: Lineup['rotations']): Record<string, Player> {
+  const referenced = new Set<string>();
+  for (const r of rotations) {
+    for (const phase of [r.serve, r.receive]) {
+      phase.court.forEach((id) => id && referenced.add(id));
+      phase.leftBench.forEach((id) => referenced.add(id));
+      phase.rightBench.forEach((id) => referenced.add(id));
+      phase.subsBench.forEach((id) => referenced.add(id));
+      if (phase.liberoBench) referenced.add(phase.liberoBench);
+    }
+  }
+  const pruned: Record<string, Player> = {};
+  referenced.forEach((id) => {
+    if (roster[id]) pruned[id] = roster[id];
+  });
+  return pruned;
 }
 
 function loadFromStorage(settings: LineupSettings): Lineup[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      const data: StoredData = JSON.parse(stored);
-      const lineups = data.lineups.map(migrateLineup);
-      // Ensure we have all lineups
-      while (lineups.length < settings.numLineups) {
-        lineups.push(createEmptyLineup(settings));
+      const data = JSON.parse(stored) as StoredData;
+      if (Array.isArray(data?.lineups)) {
+        const lineups = data.lineups.map((l) => normalizeLineup(l, settings));
+        while (lineups.length < settings.numLineups) {
+          lineups.push(createEmptyLineup(settings));
+        }
+        return lineups;
       }
-      return lineups;
     }
   } catch (e) {
     console.error('Failed to load from localStorage:', e);
@@ -119,9 +309,188 @@ const SUB_POSITIONS: Record<'forward' | 'backward', { LEFT_ENTRY: number; LEFT_E
   backward: { LEFT_ENTRY: 3, LEFT_EXIT: 0, RIGHT_ENTRY: 2, RIGHT_EXIT: 5 },
 };
 
-// Helper to compact subs (remove empty slots)
-function compactSubs(subs: SubSlot[]): SubSlot[] {
-  return subs.filter((s) => s.player !== null);
+// Apply one rotation step to a formation, subbing in from both side benches and
+// blocking female exits as needed to keep at least `minGirls` on the court. The
+// libero is swapped to the libero bench when it would leave the back row.
+function rotateView(view: View, minGirls: number, direction: 'forward' | 'backward'): View {
+  const { leftSubs, rightSubs } = view;
+  const rotationMap = ROTATION_MAP[direction];
+  const { LEFT_ENTRY, LEFT_EXIT, RIGHT_ENTRY, RIGHT_EXIT } = SUB_POSITIONS[direction];
+
+  // The libero only plays the back row. If it's sitting in the back-row slot
+  // about to leave the back row (whether by rotating to the front or by subbing
+  // out to a side bench), swap it to the libero bench first and let the libero
+  // bench player rotate in its place.
+  const frontRow = PLAYER_COUNT / 2;
+  let backRowExit = -1;
+  for (let s = frontRow; s < PLAYER_COUNT; s++) {
+    if (rotationMap[s] < frontRow) {
+      backRowExit = s;
+      break;
+    }
+  }
+
+  let currentPlayers = view.court;
+  let libero = view.libero;
+  if (backRowExit >= 0 && currentPlayers[backRowExit]?.position === 'libero') {
+    const swapped = [...currentPlayers];
+    libero = swapped[backRowExit];        // libero goes to the libero bench
+    swapped[backRowExit] = view.libero;   // bench player comes onto the court
+    currentPlayers = swapped;
+  }
+
+  // Forward: left bench top enters, right bench bottom enters (reversed for backward).
+  const leftSubEntering = leftSubs.length > 0
+    ? (direction === 'forward' ? leftSubs[0] : leftSubs[leftSubs.length - 1])
+    : null;
+  const rightSubEntering = rightSubs.length > 0
+    ? (direction === 'forward' ? rightSubs[rightSubs.length - 1] : rightSubs[0])
+    : null;
+
+  const leftWillSub = !!leftSubEntering;
+  const rightWillSub = !!rightSubEntering;
+
+  const leftExitPlayer = currentPlayers[LEFT_EXIT];
+  const rightExitPlayer = currentPlayers[RIGHT_EXIT];
+
+  // Count girls that would remain after both potential exits
+  let girlsRemaining = 0;
+  for (let i = 0; i < PLAYER_COUNT; i++) {
+    if (leftWillSub && i === LEFT_EXIT) continue;
+    if (rightWillSub && i === RIGHT_EXIT) continue;
+    if (currentPlayers[i]?.gender === 'female') girlsRemaining++;
+  }
+
+  let girlsEntering = 0;
+  if (leftWillSub && leftSubEntering?.gender === 'female') girlsEntering++;
+  if (rightWillSub && rightSubEntering?.gender === 'female') girlsEntering++;
+
+  const totalGirlsAfter = girlsRemaining + girlsEntering;
+
+  // Determine which exits need to be blocked to maintain min girls
+  let blockLeftExit = false;
+  let blockRightExit = false;
+
+  if (totalGirlsAfter < minGirls) {
+    const leftExitIsFemale = leftWillSub && leftExitPlayer?.gender === 'female';
+    const rightExitIsFemale = rightWillSub && rightExitPlayer?.gender === 'female';
+
+    const girlsIfBlockLeft = girlsRemaining + (leftExitIsFemale ? 1 : 0);
+    const girlsIfBlockRight = girlsRemaining + (rightExitIsFemale ? 1 : 0);
+    const girlsIfBlockBoth = girlsRemaining + (leftExitIsFemale ? 1 : 0) + (rightExitIsFemale ? 1 : 0);
+
+    if (girlsIfBlockBoth + girlsEntering >= minGirls) {
+      if (girlsIfBlockLeft + girlsEntering >= minGirls && leftExitIsFemale) {
+        blockLeftExit = true;
+      } else if (girlsIfBlockRight + girlsEntering >= minGirls && rightExitIsFemale) {
+        blockRightExit = true;
+      } else {
+        if (leftExitIsFemale) blockLeftExit = true;
+        if (rightExitIsFemale) blockRightExit = true;
+      }
+    } else {
+      if (leftExitIsFemale) blockLeftExit = true;
+      if (rightExitIsFemale) blockRightExit = true;
+    }
+  }
+
+  const newPlayers: (Player | null)[] = new Array(PLAYER_COUNT).fill(null);
+
+  const leftSubbing = leftWillSub && !blockLeftExit;
+  const rightSubbing = rightWillSub && !blockRightExit;
+
+  for (let slot = 0; slot < PLAYER_COUNT; slot++) {
+    const player = currentPlayers[slot];
+
+    if (slot === LEFT_EXIT) {
+      if (blockLeftExit) {
+        newPlayers[LEFT_ENTRY] = player;
+      } else if (leftSubbing) {
+        continue;
+      } else {
+        newPlayers[rotationMap[slot]] = player;
+      }
+      continue;
+    }
+
+    if (slot === RIGHT_EXIT) {
+      if (blockRightExit) {
+        newPlayers[RIGHT_ENTRY] = player;
+      } else if (rightSubbing) {
+        continue;
+      } else {
+        newPlayers[rotationMap[slot]] = player;
+      }
+      continue;
+    }
+
+    let nextSlot = rotationMap[slot];
+
+    if (nextSlot === LEFT_ENTRY && (leftSubbing || blockLeftExit)) {
+      nextSlot = rotationMap[LEFT_EXIT];
+    }
+    if (nextSlot === RIGHT_ENTRY && (rightSubbing || blockRightExit)) {
+      nextSlot = rotationMap[RIGHT_EXIT];
+    }
+
+    newPlayers[nextSlot] = player;
+  }
+
+  if (leftSubbing && leftSubEntering) newPlayers[LEFT_ENTRY] = leftSubEntering;
+  if (rightSubbing && rightSubEntering) newPlayers[RIGHT_ENTRY] = rightSubEntering;
+
+  // Left bench - forward: top enters, exiting goes to bottom. backward: reversed.
+  let newLeft = leftSubs;
+  if (leftSubbing && leftSubEntering && leftExitPlayer) {
+    newLeft = direction === 'forward'
+      ? [...leftSubs.slice(1), leftExitPlayer]
+      : [leftExitPlayer, ...leftSubs.slice(0, -1)];
+  }
+
+  // Right bench - forward: bottom enters, exiting goes to top. backward: reversed.
+  let newRight = rightSubs;
+  if (rightSubbing && rightSubEntering && rightExitPlayer) {
+    newRight = direction === 'forward'
+      ? [rightExitPlayer, ...rightSubs.slice(0, -1)]
+      : [...rightSubs.slice(1), rightExitPlayer];
+  }
+
+  return { court: newPlayers, leftSubs: newLeft, rightSubs: newRight, libero };
+}
+
+function cloneRotation(r: Rotation): Rotation {
+  return {
+    court: [...r.court],
+    leftBench: [...r.leftBench],
+    rightBench: [...r.rightBench],
+    liberoBench: r.liberoBench,
+    subsBench: [...r.subsBench],
+  };
+}
+
+// Re-derive every rotation that follows `startIndex` by applying rotate-forward
+// from the phase that was edited, leaving rotations before `startIndex` intact.
+// Editing serve mirrors into receive; editing receive leaves serve untouched.
+// Followers are produced one per field player (serve/receive stored identically).
+function hydrateFrom(lineup: Lineup, startIndex: number, phase: Phase): Lineup {
+  const rotations = lineup.rotations.slice(0, startIndex + 1);
+
+  const existing = rotations[startIndex] ?? { serve: createEmptyRotation(), receive: createEmptyRotation() };
+  const startFormation = existing[phase];
+  rotations[startIndex] = phase === 'serve'
+    ? { serve: cloneRotation(startFormation), receive: cloneRotation(startFormation) }
+    : { serve: existing.serve, receive: cloneRotation(startFormation) };
+
+  let view = resolveRotationView(startFormation, lineup.roster);
+  const total = Math.max(startIndex + 1, fieldCount(view) || 1);
+
+  for (let i = startIndex + 1; i < total; i++) {
+    view = rotateView(view, lineup.minGirls, 'forward');
+    const formation = viewToRotation(view, startFormation.subsBench);
+    rotations.push({ serve: formation, receive: cloneRotation(formation) });
+  }
+
+  return { ...lineup, roster: pruneRoster(lineup.roster, rotations), rotations };
 }
 
 interface AppProps {
@@ -137,41 +506,49 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const [activeLineupIndex, setActiveLineupIndex] = useState(() => loadActiveIndex());
   const [lineups, setLineups] = useState<Lineup[]>(() => loadFromStorage(settings));
 
+  // Which rotation/phase is currently being viewed and edited.
+  const [activeRotation, setActiveRotation] = useState(0);
+  const [activePhase, setActivePhase] = useState<Phase>('serve');
+
   // Get current lineup data
   const currentLineup = lineups[activeLineupIndex];
-  console.log("currentLineup", currentLineup)
-  const { minGirls, courtSlots, leftSubs, rightSubs, libero } = currentLineup;
+  const { minGirls, roster } = currentLineup;
 
-  // Update functions that modify the current lineup
-  const updateCurrentLineup = (updates: Partial<Lineup>) => {
+  // Resolve the active rotation to player objects for the UI / drag logic.
+  const { court, leftSubs, rightSubs, libero } = resolveView(currentLineup, activeRotation, activePhase);
+
+  // Transform the active rotation's resolved formation and write it back. Uses a
+  // functional state update so multiple calls within one event compose.
+  const updateView = (transform: (cur: View) => View) => {
     setLineups(prev => prev.map((lineup, i) =>
-      i === activeLineupIndex ? { ...lineup, ...updates } : lineup
+      i === activeLineupIndex
+        ? writeView(lineup, transform(resolveView(lineup, activeRotation, activePhase)), activeRotation, activePhase)
+        : lineup
     ));
   };
 
-  const setMinGirls = (min: number) => updateCurrentLineup({ minGirls: min });
-  const setCourtSlots = (updater: CourtSlot[] | ((prev: CourtSlot[]) => CourtSlot[])) => {
-    setLineups(prev => prev.map((lineup, i) => {
-      if (i !== activeLineupIndex) return lineup;
-      const newSlots = typeof updater === 'function' ? updater(lineup.courtSlots) : updater;
-      return { ...lineup, courtSlots: newSlots };
-    }));
+  // One tracker step per stored rotation (which is derived from court + both
+  // side benches). Hidden until the lineup has players.
+  const rotationCount = Object.keys(roster).length > 0 ? currentLineup.rotations.length : 0;
+
+  const viewRotation = (index: number) => {
+    setActiveRotation(index);
+    setActivePhase('serve');
   };
-  const setLeftSubs = (updater: SubSlot[] | ((prev: SubSlot[]) => SubSlot[])) => {
-    setLineups(prev => prev.map((lineup, i) => {
-      if (i !== activeLineupIndex) return lineup;
-      const newSubs = typeof updater === 'function' ? updater(lineup.leftSubs) : updater;
-      return { ...lineup, leftSubs: newSubs };
-    }));
-  };
-  const setRightSubs = (updater: SubSlot[] | ((prev: SubSlot[]) => SubSlot[])) => {
-    setLineups(prev => prev.map((lineup, i) => {
-      if (i !== activeLineupIndex) return lineup;
-      const newSubs = typeof updater === 'function' ? updater(lineup.rightSubs) : updater;
-      return { ...lineup, rightSubs: newSubs };
-    }));
-  };
-  const setLibero = (player: Player | null) => updateCurrentLineup({ libero: player });
+
+  // minGirls affects how rotate-forward blocks female exits, so re-derive the
+  // whole cascade from the base rotation.
+  const setMinGirls = (min: number) =>
+    setLineups(prev => prev.map((lineup, i) =>
+      i === activeLineupIndex ? hydrateFrom({ ...lineup, minGirls: min }, 0, 'serve') : lineup
+    ));
+  const setCourt = (updater: (prev: (Player | null)[]) => (Player | null)[]) =>
+    updateView(cur => ({ ...cur, court: updater(cur.court) }));
+  const setLeftSubs = (updater: (prev: Player[]) => Player[]) =>
+    updateView(cur => ({ ...cur, leftSubs: updater(cur.leftSubs) }));
+  const setRightSubs = (updater: (prev: Player[]) => Player[]) =>
+    updateView(cur => ({ ...cur, rightSubs: updater(cur.rightSubs) }));
+  const setLibero = (player: Player | null) => updateView(cur => ({ ...cur, libero: player }));
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -179,10 +556,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   }, [activeLineupIndex, lineups]);
 
   // Check if there are any players
-  const hasPlayers = courtSlots.some(s => s.player !== null) ||
-    leftSubs.some(s => s.player !== null) ||
-    rightSubs.some(s => s.player !== null) ||
-    libero !== null;
+  const hasPlayers = Object.keys(roster).length > 0;
 
   const [resetModalOpen, setResetModalOpen] = useState(false);
 
@@ -206,7 +580,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   } | null>(null);
 
   // Check if all court slots are filled
-  const isCourtFull = courtSlots.every((slot) => slot.player !== null);
+  const isCourtFull = court.every((player) => player !== null);
 
   const handleSlotClick = (slotIndex: number) => {
     setEditingSlot({ type: 'court', index: slotIndex });
@@ -234,10 +608,10 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   const getCurrentPlayer = (): Player | null => {
     if (!editingSlot) return null;
     if (editingSlot.type === 'court') {
-      return courtSlots[editingSlot.index]?.player || null;
+      return court[editingSlot.index] ?? null;
     } else if (editingSlot.type === 'sub') {
       const subs = editingSlot.side === 'left' ? leftSubs : rightSubs;
-      return subs[editingSlot.index]?.player || null;
+      return subs[editingSlot.index] ?? null;
     } else if (editingSlot.type === 'libero') {
       return libero;
     }
@@ -254,25 +628,16 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     };
 
     if (editingSlot.type === 'court') {
-      setCourtSlots((prev) =>
-        prev.map((slot, i) =>
-          i === editingSlot.index ? { ...slot, player } : slot
-        )
-      );
+      setCourt((prev) => prev.map((p, i) => (i === editingSlot.index ? player : p)));
     } else if (editingSlot.type === 'libero') {
       setLibero(player);
     } else {
       const setSubs = editingSlot.side === 'left' ? setLeftSubs : setRightSubs;
-      setSubs((prev) => {
-        // If adding a new sub (index equals array length), push new slot
-        if (editingSlot.index >= prev.length) {
-          return [...prev, { player }];
-        }
-        // Otherwise update existing slot
-        return prev.map((slot, i) =>
-          i === editingSlot.index ? { ...slot, player } : slot
-        );
-      });
+      setSubs((prev) =>
+        editingSlot.index >= prev.length
+          ? [...prev, player]
+          : prev.map((p, i) => (i === editingSlot.index ? player : p))
+      );
     }
 
     setModalOpen(false);
@@ -283,42 +648,23 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     if (!editingSlot) return;
 
     if (editingSlot.type === 'court') {
-      // Find a replacement sub: left side first (top to bottom), then right side (top to bottom)
-      const leftFilledSub = leftSubs.find((s) => s.player !== null);
-      const rightFilledSub = rightSubs.find((s) => s.player !== null);
-      const replacementSub = leftFilledSub || rightFilledSub;
+      // Find a replacement: left bench first (top to bottom), then right bench
+      const fromLeft = leftSubs.length > 0;
+      const replacement = fromLeft ? leftSubs[0] : rightSubs[0] ?? null;
 
-      if (replacementSub) {
-        // Replace court player with sub
-        setCourtSlots((prev) =>
-          prev.map((slot, i) =>
-            i === editingSlot.index ? { ...slot, player: replacementSub.player } : slot
-          )
-        );
-
-        // Remove sub from bench (first filled sub was used)
-        if (leftFilledSub) {
+      if (replacement) {
+        setCourt((prev) => prev.map((p, i) => (i === editingSlot.index ? replacement : p)));
+        if (fromLeft) {
           setLeftSubs((prev) => prev.slice(1));
         } else {
           setRightSubs((prev) => prev.slice(1));
         }
       } else {
-        // No subs available, just remove the player
-        setCourtSlots((prev) =>
-          prev.map((slot, i) =>
-            i === editingSlot.index ? { ...slot, player: null } : slot
-          )
-        );
+        setCourt((prev) => prev.map((p, i) => (i === editingSlot.index ? null : p)));
       }
     } else if (editingSlot.type === 'sub') {
       const setSubs = editingSlot.side === 'left' ? setLeftSubs : setRightSubs;
-      setSubs((prev) => {
-        const updated = prev.map((slot, i) =>
-          i === editingSlot.index ? { ...slot, player: null } : slot
-        );
-        // Compact the subs to remove gaps
-        return compactSubs(updated);
-      });
+      setSubs((prev) => prev.filter((_, i) => i !== editingSlot.index));
     } else if (editingSlot.type === 'libero') {
       setLibero(null);
     }
@@ -327,186 +673,13 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     setEditingSlot(null);
   };
 
-  // Rotation logic supporting both sides subbing in simultaneously
+  // Step the viewed rotation forward/backward through the stored rotations,
+  // wrapping around. Keeps the current serve/receive phase.
   const handleRotate = (direction: 'forward' | 'backward') => {
-    const currentPlayers = courtSlots.map((slot) => slot.player);
-    const rotationMap = ROTATION_MAP[direction];
-
-    const { LEFT_ENTRY, LEFT_EXIT, RIGHT_ENTRY, RIGHT_EXIT } = SUB_POSITIONS[direction];
-
-    // Get filled subs on each side
-    const leftFilledSubs = leftSubs.filter((s) => s.player !== null);
-    const rightFilledSubs = rightSubs.filter((s) => s.player !== null);
-
-    // Forward rotation:
-    //   LEFT side: top sub enters, exiting player goes to bottom
-    //   RIGHT side: bottom sub enters, exiting player goes to top
-    // Backward rotation (reversed):
-    //   LEFT side: bottom sub enters, exiting player goes to top
-    //   RIGHT side: top sub enters, exiting player goes to bottom
-    const leftSubEntering = leftFilledSubs.length > 0
-      ? (direction === 'forward' ? leftFilledSubs[0] : leftFilledSubs[leftFilledSubs.length - 1])
-      : null;
-    const rightSubEntering = rightFilledSubs.length > 0
-      ? (direction === 'forward' ? rightFilledSubs[rightFilledSubs.length - 1] : rightFilledSubs[0])
-      : null;
-
-    // Determine which sides will sub based on availability
-    const leftWillSub = !!leftSubEntering;
-    const rightWillSub = !!rightSubEntering;
-
-    // Get players at exit positions
-    const leftExitPlayer = currentPlayers[LEFT_EXIT];
-    const rightExitPlayer = currentPlayers[RIGHT_EXIT];
-
-    // Count girls that would remain after both potential exits
-    let girlsRemaining = 0;
-    for (let i = 0; i < PLAYER_COUNT; i++) {
-      if (leftWillSub && i === LEFT_EXIT) continue;
-      if (rightWillSub && i === RIGHT_EXIT) continue;
-      if (currentPlayers[i]?.gender === 'female') girlsRemaining++;
-    }
-
-    // Count girls coming in from subs
-    let girlsEntering = 0;
-    if (leftWillSub && leftSubEntering?.player?.gender === 'female') girlsEntering++;
-    if (rightWillSub && rightSubEntering?.player?.gender === 'female') girlsEntering++;
-
-    // Check if rotation would violate min girls
-    const totalGirlsAfter = girlsRemaining + girlsEntering;
-
-    // Determine which exits need to be blocked to maintain min girls
-    let blockLeftExit = false;
-    let blockRightExit = false;
-
-    if (totalGirlsAfter < minGirls) {
-      const leftExitIsFemale = leftWillSub && leftExitPlayer?.gender === 'female';
-      const rightExitIsFemale = rightWillSub && rightExitPlayer?.gender === 'female';
-
-      // Calculate girls we'd have if we block various combinations
-      const girlsIfBlockLeft = girlsRemaining + (leftExitIsFemale ? 1 : 0);
-      const girlsIfBlockRight = girlsRemaining + (rightExitIsFemale ? 1 : 0);
-      const girlsIfBlockBoth = girlsRemaining + (leftExitIsFemale ? 1 : 0) + (rightExitIsFemale ? 1 : 0);
-
-      // Try to find minimum blocking needed to maximize girls on court
-      // Even if we can't meet minGirls, we should still block female exits to keep as many girls as possible
-      if (girlsIfBlockBoth + girlsEntering >= minGirls) {
-        // Blocking can satisfy the requirement - find minimum needed
-        if (girlsIfBlockLeft + girlsEntering >= minGirls && leftExitIsFemale) {
-          blockLeftExit = true;
-        } else if (girlsIfBlockRight + girlsEntering >= minGirls && rightExitIsFemale) {
-          blockRightExit = true;
-        } else {
-          // Need to block both
-          if (leftExitIsFemale) blockLeftExit = true;
-          if (rightExitIsFemale) blockRightExit = true;
-        }
-      } else {
-        // Can't satisfy requirement even with blocking, but still block all female exits
-        // to keep as many girls on court as possible
-        if (leftExitIsFemale) blockLeftExit = true;
-        if (rightExitIsFemale) blockRightExit = true;
-      }
-    }
-
-    // Create new player positions
-    const newPlayers: (Player | null)[] = new Array(PLAYER_COUNT).fill(null);
-
-    const leftSubbing = leftWillSub && !blockLeftExit;
-    const rightSubbing = rightWillSub && !blockRightExit;
-
-    // Apply rotation
-    for (let slot = 0; slot < PLAYER_COUNT; slot++) {
-      const player = currentPlayers[slot];
-
-      if (slot === LEFT_EXIT) {
-        if (blockLeftExit) {
-          newPlayers[LEFT_ENTRY] = player;
-        } else if (leftSubbing) {
-          continue;
-        } else {
-          newPlayers[rotationMap[slot]] = player;
-        }
-        continue;
-      }
-
-      if (slot === RIGHT_EXIT) {
-        if (blockRightExit) {
-          newPlayers[RIGHT_ENTRY] = player;
-        } else if (rightSubbing) {
-          continue;
-        } else {
-          newPlayers[rotationMap[slot]] = player;
-        }
-        continue;
-      }
-
-      let nextSlot = rotationMap[slot];
-
-      if (nextSlot === LEFT_ENTRY && (leftSubbing || blockLeftExit)) {
-        nextSlot = rotationMap[LEFT_EXIT];
-      }
-      if (nextSlot === RIGHT_ENTRY && (rightSubbing || blockRightExit)) {
-        nextSlot = rotationMap[RIGHT_EXIT];
-      }
-
-      newPlayers[nextSlot] = player;
-    }
-
-    // Place subs at entry positions
-    if (leftSubbing && leftSubEntering) {
-      newPlayers[LEFT_ENTRY] = leftSubEntering.player;
-    }
-    if (rightSubbing && rightSubEntering) {
-      newPlayers[RIGHT_ENTRY] = rightSubEntering.player;
-    }
-
-    // Update left subs based on direction
-    // Forward: top enters, exiting goes to bottom. [A, B] -> [B, X]
-    // Backward: bottom enters, exiting goes to top. [A, B] -> [X, A]
-    if (leftSubbing && leftSubEntering && leftExitPlayer) {
-      setLeftSubs((prev) => {
-        const players = prev.map((s) => s.player).filter((p): p is Player => p !== null);
-        let newPlayers: Player[];
-
-        if (direction === 'forward') {
-          // Remove first (top), add exiting to end (bottom)
-          newPlayers = [...players.slice(1), leftExitPlayer];
-        } else {
-          // Remove last (bottom), add exiting to start (top)
-          newPlayers = [leftExitPlayer, ...players.slice(0, -1)];
-        }
-
-        return newPlayers.map((player) => ({ player }));
-      });
-    }
-
-    // Update right subs based on direction
-    // Forward: bottom enters, exiting goes to top. [A, B, C] -> [X, A, B]
-    // Backward: top enters, exiting goes to bottom. [A, B, C] -> [B, C, X]
-    if (rightSubbing && rightSubEntering && rightExitPlayer) {
-      setRightSubs((prev) => {
-        const players = prev.map((s) => s.player).filter((p): p is Player => p !== null);
-        let newPlayers: Player[];
-
-        if (direction === 'forward') {
-          // Remove last (bottom), add exiting to start (top)
-          newPlayers = [rightExitPlayer, ...players.slice(0, -1)];
-        } else {
-          // Remove first (top), add exiting to end (bottom)
-          newPlayers = [...players.slice(1), rightExitPlayer];
-        }
-
-        return newPlayers.map((player) => ({ player }));
-      });
-    }
-
-    // Update court slots
-    setCourtSlots((prev) =>
-      prev.map((slot, i) => ({
-        ...slot,
-        player: newPlayers[i],
-      }))
+    const total = currentLineup.rotations.length;
+    if (total <= 1) return;
+    setActiveRotation((prev) =>
+      direction === 'forward' ? (prev + 1) % total : (prev - 1 + total) % total
     );
   };
 
@@ -528,6 +701,8 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // Track the actively dragged player for overlay
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeDragPlayer, setActiveDragPlayer] = useState<Player | null>(null);
+  // Message explaining why the current hover target can't be dropped on.
+  const [dragToast, setDragToast] = useState<string | null>(null);
 
   // Parse slot ID helper
   const parseSlotId = (id: string): SlotRef | null => {
@@ -545,24 +720,12 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // Get player from slot
   const getPlayerFromSlot = (slot: SlotRef): Player | null => {
     if (slot.type === 'court') {
-      return courtSlots[slot.index]?.player ?? null;
+      return court[slot.index] ?? null;
     } else if (slot.type === 'sub') {
       const subs = slot.side === 'left' ? leftSubs : rightSubs;
-      return subs[slot.index]?.player ?? null;
+      return subs[slot.index] ?? null;
     }
     return libero;
-  };
-
-  // Write a single player into a slot (used by the swap below)
-  const writePlayerToSlot = (slot: SlotRef, player: Player | null) => {
-    if (slot.type === 'court') {
-      setCourtSlots(prev => prev.map((s, i) => (i === slot.index ? { ...s, player } : s)));
-    } else if (slot.type === 'sub') {
-      const setSubs = slot.side === 'left' ? setLeftSubs : setRightSubs;
-      setSubs(prev => prev.map((s, i) => (i === slot.index ? { ...s, player } : s)));
-    } else {
-      setLibero(player);
-    }
   };
 
   // Handle drag start
@@ -579,50 +742,68 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // Court slots are laid out row-major in a 2x3 grid, so the back row is 3-5.
   const isBackRowCourtIndex = (index: number) => index >= PLAYER_COUNT / 2;
 
-  // Whether swapping the players in `source` and `target` is allowed. Single
-  // source of truth for both the drop handler and the drop-target highlight.
-  const canSwap = (source: SlotRef, target: SlotRef): boolean => {
+  // Why swapping `source` and `target` is not allowed, or null when it's fine.
+  // Single source of truth for the drop handler, the drop-target highlight, and
+  // the toast shown while dragging over an invalid target.
+  const swapDenial = (source: SlotRef, target: SlotRef): string | null => {
     const sourcePlayer = getPlayerFromSlot(source);
     const targetPlayer = getPlayerFromSlot(target);
 
     // Court players can't be dropped onto empty bench spots
-    if (source.type === 'court' && target.type === 'sub' && !targetPlayer) return false;
+    if (source.type === 'court' && target.type === 'sub' && !targetPlayer) {
+      return 'Empty bench spot';
+    }
 
     const sourceIsLibero = sourcePlayer?.position === 'libero';
     const targetIsLibero = targetPlayer?.position === 'libero';
+    const liberoInvolved = sourceIsLibero || targetIsLibero;
+    const liberoBenchInvolved = source.type === 'libero' || target.type === 'libero';
 
-    // Every swap touching the libero bench must be driven by the libero itself
-    // (so a player who got bumped onto the bench can't leave on their own), and
-    // the libero bench only ever pairs with a court slot.
-    if (source.type === 'libero' || target.type === 'libero') {
-      if (!sourceIsLibero) return false;
-      const other = source.type === 'libero' ? target : source;
-      if (other.type !== 'court') return false;
+    // Anything in/out of the libero bench has to involve the libero itself.
+    if (liberoBenchInvolved && !liberoInvolved) {
+      return 'Bench swap must include libero';
     }
-    // An on-court libero may only swap with the libero bench - never with another
-    // court player or side bench (regardless of which side initiates the drag).
-    if (sourceIsLibero && source.type === 'court' && target.type !== 'libero') return false;
-    if (targetIsLibero && target.type === 'court' && source.type !== 'libero') return false;
 
-    // The libero may only play the back row, so it can only be swapped onto a
-    // back-row court player.
-    if (sourceIsLibero && source.type === 'libero' && target.type === 'court' && !isBackRowCourtIndex(target.index)) {
-      return false;
+    // When the libero is part of the swap (as the dragged or the replaced
+    // player), it lands in the other slot - which must be the libero bench or a
+    // back-row court slot, never the front row or a side bench.
+    if (liberoInvolved) {
+      const liberoDest = sourceIsLibero ? target : source;
+      if (liberoDest.type === 'sub' || (liberoDest.type === 'court' && !isBackRowCourtIndex(liberoDest.index))) {
+        return 'Libero must be back row';
+      }
     }
 
     // A swap must keep at least `minGirls` females across the court positions
     const isFemale = (p: Player | null) => p?.gender === 'female';
-    let courtFemales = courtSlots.filter(s => isFemale(s.player)).length;
+    let courtFemales = court.filter(isFemale).length;
     if (source.type === 'court') {
       courtFemales += (isFemale(targetPlayer) ? 1 : 0) - (isFemale(sourcePlayer) ? 1 : 0);
     }
     if (target.type === 'court') {
       courtFemales += (isFemale(sourcePlayer) ? 1 : 0) - (isFemale(targetPlayer) ? 1 : 0);
     }
-    if (courtFemales < minGirls) return false;
+    if (courtFemales < minGirls) {
+      return `Must have ${minGirls} female${minGirls === 1 ? '' : 's'} on court`;
+    }
 
-    return true;
+    // The libero may only serve for one player across all rotations. Simulate the
+    // resulting lineup (the swap cascades into later rotations) and check.
+    if (Object.values(roster).some((p) => p.position === 'libero')) {
+      const after = writeView(
+        currentLineup,
+        swapInView({ court, leftSubs, rightSubs, libero }, source, target),
+        activeRotation,
+        activePhase,
+      );
+      const liberoIssue = liberoServeViolation(after);
+      if (liberoIssue) return liberoIssue;
+    }
+
+    return null;
   };
+
+  const canSwap = (source: SlotRef, target: SlotRef): boolean => swapDenial(source, target) === null;
 
   // Would dropping the active drag onto the slot with this id be accepted?
   // Used to drive the green drop-target highlight so it matches the drop logic.
@@ -634,6 +815,24 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     return canSwap(source, target);
   };
 
+  // While dragging, show a toast explaining why the hovered target is invalid.
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setDragToast(null);
+      return;
+    }
+    const source = parseSlotId(String(active.id));
+    const target = parseSlotId(String(over.id));
+    setDragToast(source && target ? swapDenial(source, target) : null);
+  };
+
+  // Drag was cancelled (e.g. dropped nowhere or Esc) - clear drag state + toast.
+  const handleDragCancel = () => {
+    setActiveDragPlayer(null);
+    setDragToast(null);
+  };
+
   // Handle drag end - every drop swaps the players in the two slots involved
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -641,6 +840,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     // Clear drag state
     setActiveId(null);
     setActiveDragPlayer(null);
+    setDragToast(null);
 
     // Dropped outside any valid target, or back where it started - nothing to do
     if (!over || active.id === over.id) return;
@@ -651,10 +851,8 @@ function App({ settings: settingsOverride }: AppProps = {}) {
 
     if (!canSwap(activeSlot, overSlot)) return;
 
-    // Swap the two slots' players. Functional updaters compose, so two writes to
-    // the same underlying array (e.g. same-bench sub swap) apply correctly.
-    writePlayerToSlot(activeSlot, getPlayerFromSlot(overSlot));
-    writePlayerToSlot(overSlot, getPlayerFromSlot(activeSlot));
+    // Swap both slots' players in a single update so the rotations cascade once.
+    updateView((cur) => swapInView(cur, activeSlot, overSlot));
   };
 
   // Render drag overlay content
@@ -725,7 +923,10 @@ function App({ settings: settingsOverride }: AppProps = {}) {
             <button
               key={index}
               className={`lineup-tab ${index === activeLineupIndex ? 'active' : ''}`}
-              onClick={() => setActiveLineupIndex(index)}
+              onClick={() => {
+                setActiveLineupIndex(index);
+                viewRotation(0);
+              }}
             >
               L{index + 1}
             </button>
@@ -733,14 +934,21 @@ function App({ settings: settingsOverride }: AppProps = {}) {
         </div>
 
         <main className="main">
+          <RotationTracker
+            count={rotationCount}
+            activeIndex={activeRotation}
+            onSelect={viewRotation}
+          />
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
             <div className="arena">
               <SubBench
-                subs={leftSubs}
+                players={leftSubs}
                 side="left"
                 onSubClick={handleSubClick}
                 onAddSub={handleAddSub}
@@ -749,13 +957,16 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                 canDropOnId={canDropOnId}
               />
               <Court
-                slots={courtSlots}
+                court={court}
                 onSlotClick={handleSlotClick}
                 draggingPlayerId={activeDragPlayer?.id}
                 canDropOnId={canDropOnId}
+                rotationNumber={activeRotation + 1}
+                phase={activePhase}
+                onPhaseChange={setActivePhase}
               />
               <SubBench
-                subs={rightSubs}
+                players={rightSubs}
                 side="right"
                 onSubClick={handleSubClick}
                 onAddSub={handleAddSub}
@@ -767,6 +978,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
             <LiberoBench
               libero={libero}
               onClick={handleLiberoClick}
+              canAdd={isCourtFull}
               isBeingDragged={activeId === 'libero'}
               isValidDropTarget={canDropOnId('libero')}
             />
@@ -779,6 +991,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
             minGirls={minGirls}
             onMinGirlsChange={setMinGirls}
             onRotate={handleRotate}
+            canRotate={rotationCount >= 6}
             onReset={handleResetClick}
             showReset={hasPlayers}
             lineupNumber={activeLineupIndex + 1}
@@ -811,6 +1024,12 @@ function App({ settings: settingsOverride }: AppProps = {}) {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {dragToast && (
+          <div className="drag-toast" role="status">
+            {dragToast}
           </div>
         )}
       </div>

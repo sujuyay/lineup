@@ -1,4 +1,4 @@
-export type Position = 'setter' | 'outside_hitter' | 'opposite_hitter' | 'libero' | 'middle_blocker';
+export type Position = 'setter' | 'outside_hitter' | 'opposite_hitter' | 'libero' | 'middle_blocker' | 'defensive_specialist';
 
 export type Gender = 'male' | 'female';
 
@@ -9,21 +9,13 @@ export interface Player {
     gender: Gender;
 }
 
-export interface CourtSlot {
-    player: Player | null;
-    slotIndex: number;
-}
-
-export interface SubSlot {
-    player: Player | null;
-}
-
 export const POSITION_COLORS: Record<Position, string> = {
     setter: '#E6B333',
     outside_hitter: '#3366E6',
     opposite_hitter: '#FF6B6B',
     libero: '#2ECC71',
     middle_blocker: '#9B59B6',
+    defensive_specialist: '#E67E22',
 };
 
 export const POSITION_LABELS: Record<Position, string> = {
@@ -32,6 +24,7 @@ export const POSITION_LABELS: Record<Position, string> = {
     opposite_hitter: 'Opposite Hitter',
     libero: 'Libero',
     middle_blocker: 'Middle Blocker',
+    defensive_specialist: 'Defensive Specialist',
 };
 
 export const POSITION_ABBREV: Record<Position, string> = {
@@ -40,5 +33,6 @@ export const POSITION_ABBREV: Record<Position, string> = {
     opposite_hitter: 'OP',
     libero: 'L',
     middle_blocker: 'MB',
+    defensive_specialist: 'DS',
 };
 

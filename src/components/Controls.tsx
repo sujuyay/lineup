@@ -4,6 +4,7 @@ interface ControlsProps {
     minGirls: number;
     onMinGirlsChange: (min: number) => void;
     onRotate: (direction: 'forward' | 'backward') => void;
+    canRotate: boolean;
     onReset: () => void;
     showReset: boolean;
     lineupNumber: number;
@@ -13,6 +14,7 @@ export function Controls({
     minGirls,
     onMinGirlsChange,
     onRotate,
+    canRotate,
     onReset,
     showReset,
     lineupNumber,
@@ -23,8 +25,8 @@ export function Controls({
             <div className="control-group">
                 <label className="label-large">Rotate</label>
                 <div className="rotate-input">
-                    <button onClick={() => onRotate('backward')}>&lt;</button>
-                    <button onClick={() => onRotate('forward')}>&gt;</button>
+                    <button onClick={() => onRotate('backward')} disabled={!canRotate}>&lt;</button>
+                    <button onClick={() => onRotate('forward')} disabled={!canRotate}>&gt;</button>
                 </div>
             </div>
 

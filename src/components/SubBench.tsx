@@ -1,8 +1,9 @@
-import type { SubSlot } from '../types';
+import type { Player } from '../types';
+import { useSettings } from '../config';
 import { DraggablePlayerSlot } from './DraggablePlayerSlot';
 
 interface SubBenchProps {
-    subs: SubSlot[];
+    players: Player[];
     side: 'left' | 'right';
     onSubClick: (side: 'left' | 'right', slotIndex: number) => void;
     onAddSub: (side: 'left' | 'right') => void;
@@ -12,7 +13,7 @@ interface SubBenchProps {
 }
 
 export function SubBench({
-    subs,
+    players,
     side,
     onSubClick,
     onAddSub,
@@ -20,27 +21,25 @@ export function SubBench({
     draggingPlayerId,
     canDropOnId,
 }: SubBenchProps) {
-    // Get subs that have players
-    const filledSubs = subs.filter((sub) => sub.player !== null);
-    const canAddMore = canAddSubs && filledSubs.length < 4;
+    const { maxSizePerBench } = useSettings();
+    const canAddMore = canAddSubs && players.length < maxSizePerBench;
 
     return (
         <div className={`sub-bench ${side}`}>
             <div className="sub-bench-label">BENCH</div>
             <div className="sub-slots">
-                {filledSubs.map((sub, index) => {
-                    const isBeingDragged = draggingPlayerId && sub.player?.id === draggingPlayerId;
-                    const isValidDrop = canDropOnId(`sub-${side}-${index}`);
+                {players.map((player, index) => {
+                    const isBeingDragged = draggingPlayerId && player.id === draggingPlayerId;
                     return (
                         <DraggablePlayerSlot
                             key={`${side}-${index}`}
                             id={`sub-${side}-${index}`}
-                            player={sub.player}
+                            player={player}
                             onClick={() => onSubClick(side, index)}
                             size="small"
-                            canDrop={sub.player !== null}
+                            canDrop={true}
                             isBeingDragged={isBeingDragged || false}
-                            isValidDropTarget={isValidDrop}
+                            isValidDropTarget={canDropOnId(`sub-${side}-${index}`)}
                         />
                     );
                 })}
