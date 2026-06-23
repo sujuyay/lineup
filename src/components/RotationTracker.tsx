@@ -8,12 +8,14 @@ interface RotationTrackerProps {
     activeIndex: number;
     /** Called with the rotation index when a step is clicked. */
     onSelect: (index: number) => void;
+    /** Whether each rotation index passes validation (false => red border). */
+    validity?: boolean[];
 }
 
 // Numbered circles connected by a line - one per rotation. Wraps onto multiple
 // rows of up to STEPS_PER_ROW. Always shows at least MIN_STEPS; with fewer real
 // rotations than that the tracker renders disabled (steps can't be clicked).
-export function RotationTracker({ count, activeIndex, onSelect }: RotationTrackerProps) {
+export function RotationTracker({ count, activeIndex, onSelect, validity }: RotationTrackerProps) {
     const disabled = count < MIN_STEPS;
     const total = Math.max(count, MIN_STEPS);
 
@@ -29,12 +31,12 @@ export function RotationTracker({ count, activeIndex, onSelect }: RotationTracke
                     {row.map((i) => (
                         <button
                             key={i}
-                            className={`rotation-step ${i === activeIndex ? 'active' : ''}`}
+                            className={`rotation-step ${i === activeIndex ? 'active' : ''} ${validity?.[i] === false ? 'invalid' : ''}`}
                             onClick={() => onSelect(i)}
                             disabled={disabled}
                             aria-current={i === activeIndex ? 'step' : undefined}
                         >
-                            {i + 1}
+                            R{i + 1}
                         </button>
                     ))}
                 </div>

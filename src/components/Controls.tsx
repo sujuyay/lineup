@@ -5,6 +5,7 @@ interface ControlsProps {
     onMinGirlsChange: (min: number) => void;
     onRotate: (direction: 'forward' | 'backward') => void;
     canRotate: boolean;
+    rotationNumber: number;
     rotationMethod: 'bench' | 'substitutions';
     onRotationMethodChange: (method: 'bench' | 'substitutions') => void;
     onReset: () => void;
@@ -17,6 +18,7 @@ export function Controls({
     onMinGirlsChange,
     onRotate,
     canRotate,
+    rotationNumber,
     rotationMethod,
     onRotationMethodChange,
     onReset,
@@ -30,12 +32,16 @@ export function Controls({
                 <label className="label-large">Rotate</label>
                 <div className="rotate-input">
                     <button onClick={() => onRotate('backward')} disabled={!canRotate}>&lt;</button>
+                    <span className="rotate-number">R{rotationNumber}</span>
                     <button onClick={() => onRotate('forward')} disabled={!canRotate}>&gt;</button>
                 </div>
+                {rotationNumber > 1 && (
+                    <p className="rotate-subtext">Note: Players can only be configured from R1</p>
+                )}
             </div>
 
             <div className="control-group">
-                <label>Method</label>
+                <label>Rotation Method</label>
                 <div className="method-toggle">
                     <button
                         type="button"
@@ -59,24 +65,26 @@ export function Controls({
                 </p>
             </div>
 
-            <div className="control-group">
-                <label>Min Females</label>
-                <div className="number-input">
-                    <button
-                        onClick={() => onMinGirlsChange(Math.max(minGirlsBounds.min, minGirls - 1))}
-                        disabled={minGirls <= minGirlsBounds.min}
-                    >
-                        −
-                    </button>
-                    <span>{minGirls}</span>
-                    <button
-                        onClick={() => onMinGirlsChange(Math.min(PLAYER_COUNT, minGirls + 1))}
-                        disabled={minGirls >= PLAYER_COUNT}
-                    >
-                        +
-                    </button>
+            {minGirlsBounds.editable && (
+                <div className="control-group">
+                    <label>Min Females</label>
+                    <div className="number-input">
+                        <button
+                            onClick={() => onMinGirlsChange(Math.max(minGirlsBounds.min, minGirls - 1))}
+                            disabled={minGirls <= minGirlsBounds.min}
+                        >
+                            −
+                        </button>
+                        <span>{minGirls}</span>
+                        <button
+                            onClick={() => onMinGirlsChange(Math.min(PLAYER_COUNT, minGirls + 1))}
+                            disabled={minGirls >= PLAYER_COUNT}
+                        >
+                            +
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {showReset && (
                 <button className="btn-reset" onClick={onReset}>

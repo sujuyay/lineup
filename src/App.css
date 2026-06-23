@@ -30,9 +30,6 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
-  background-image:
-    radial-gradient(circle at 20% 20%, rgba(0, 212, 170, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(240, 101, 149, 0.06) 0%, transparent 50%);
 }
 
 /* ===== APP LAYOUT ===== */
@@ -168,6 +165,11 @@ body {
   box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
 }
 
+/* Rotation fails validation: flag it with a red border. */
+.rotation-step.invalid {
+  border-color: var(--danger);
+}
+
 /* Disabled until the lineup has enough rotations to navigate */
 .rotation-tracker.disabled {
   opacity: 0.4;
@@ -183,11 +185,24 @@ body {
 }
 
 /* ===== ARENA (Court + Subs) ===== */
-.arena {
+/* The arena owns the total width; the court and side benches each take a share
+   of it (flex-basis 0 with grow proportional to their old pixel widths, so the
+   bench:court:bench ratio is 125:400:125 of the space between the gaps). */
+.container {
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
+  width: 100%;
+  max-width: calc(650px + 2rem);
+  margin: 0 auto;
   gap: 1rem;
+}
+
+.arena-section {
+  display: grid;
+  grid-template-columns: 19% 1fr 19%;
+  align-items: stretch;
   justify-content: center;
+  gap: 1rem;
 }
 
 /* ===== COURT ===== */
@@ -197,11 +212,10 @@ body {
   position: relative;
   box-shadow: var(--shadow);
   border: 2px solid var(--court-lines);
-  width: 400px;
-  height: 350px;
+  flex: 440 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
 }
 
 .court-header {
@@ -262,12 +276,13 @@ body {
 
 .court-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(2, 1fr);
   gap: 1rem;
   flex: 1;
   /* The net (in flow above) provides the top spacing; padding insets the players. */
   padding: 0 1.5rem 1.5rem;
+  min-height: 250px;
 }
 
 /* ===== PLAYER SLOT ===== */
@@ -322,17 +337,33 @@ body {
   white-space: nowrap;
 }
 
-.player-gender-label {
+/* Corner labels on a player card: gender top-right, rotational position bottom-right. */
+.player-gender-label,
+.player-rotational-position-label {
+  position: absolute;
+  right: 0.4rem;
   font-size: 0.8rem;
   font-weight: 700;
   white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.player-gender-label {
+  top: 0.4rem;
+}
+
+.player-rotational-position-label {
+  bottom: 0.4rem;
 }
 
 .player-name {
   font-weight: 600;
   font-size: 0.8rem;
   text-align: center;
-  word-break: break-word;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slot-plus {
@@ -373,28 +404,16 @@ body {
 }
 
 /* ===== BENCHES (vertical side bench + horizontal libero bench) ===== */
-.sub-bench,
-.libero-bench {
+.sub-bench {
   display: flex;
   gap: 0.75rem;
   background: var(--bg-secondary);
   border-radius: var(--radius);
   border: 1px solid var(--bg-tertiary);
-}
-
-.sub-bench {
   flex-direction: column;
   padding: 1rem;
-  width: 125px;
-  flex-shrink: 0;
-}
-
-/* Horizontal version of the bench */
-.libero-bench {
-  flex-direction: row;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  align-self: center;
+  flex: 105 1 0;
+  min-width: 0;
 }
 
 .sub-bench-label,
@@ -403,13 +422,10 @@ body {
   color: var(--text-muted);
   letter-spacing: 0.15em;
   font-weight: 600;
-}
-
-.sub-bench-label {
   text-align: center;
 }
 
-.sub-slots {
+.side-bench-slots {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -417,7 +433,7 @@ body {
 }
 
 .libero-slot {
-  width: 125px;
+  width: 100%;
 }
 
 .sub-add-btn {
@@ -432,13 +448,26 @@ body {
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-height: 60px;
+  min-height: 74px;
+  width: 100%;
 }
 
 .sub-add-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
   background: var(--bg-primary);
+}
+
+.subs-bench {
+  grid-column: span 2;
+}
+
+.subs-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+  gap: 0.5rem;
+  align-content: start;
+  flex: 1;
 }
 
 /* ===== CONTROLS ===== */
@@ -450,9 +479,6 @@ body {
   padding: 1.5rem;
   background: var(--bg-secondary);
   border-radius: var(--radius);
-  width: 350px;
-  /* Match court width (400px min + padding) */
-  margin: 0 auto;
 }
 
 .control-group {
@@ -464,7 +490,7 @@ body {
 
 .control-group label {
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -523,10 +549,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 85px;
+  width: 110px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
   padding: 0.25rem;
+}
+
+.rotate-number {
+  flex: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin: 0 0.5rem;
+}
+
+.rotate-subtext {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .rotate-input button {
@@ -574,9 +616,7 @@ body {
 }
 
 .method-subtext {
-  margin-top: 0.5rem;
-  max-width: 260px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.7rem;
   line-height: 1.4;
   text-align: center;
@@ -852,8 +892,8 @@ body {
   transform: translateY(-1px);
 }
 
-/* ===== DRAG TOAST ===== */
-.drag-toast-container {
+/* ===== TOAST ===== */
+.toast-container {
   position: fixed;
   top: 1.5rem;
   left: 1rem;
@@ -863,7 +903,7 @@ body {
   justify-content: center;
 }
 
-.drag-toast {
+.toast {
   padding: 0.65rem 1.1rem;
   background: #2f242f;
   border: 1px solid var(--danger);
@@ -896,7 +936,8 @@ body {
     gap: 1.5rem;
   }
 
-  .arena {
+  .container,
+  .arena-section {
     gap: 0.5rem;
   }
 
@@ -910,11 +951,7 @@ body {
   }
 
   .court {
-    width: auto;
-    flex: 1;
-    max-width: 320px;
     height: auto;
-    min-height: 260px;
   }
 
   .court-grid {
@@ -923,7 +960,6 @@ body {
   }
 
   .sub-bench {
-    width: 80px;
     padding: 0.5rem;
   }
 
@@ -932,20 +968,27 @@ body {
     font-size: 0.6rem;
   }
 
-  .sub-slots {
+  .side-bench-slots {
     gap: 0.4rem;
   }
 
+  .subs-slots {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  }
+
   .sub-add-btn {
-    min-height: 50px;
+    min-height: 52px;
     font-size: 1rem;
   }
 
   .controls {
     width: 100%;
-    max-width: 500px;
     padding: 1rem;
     gap: 1rem;
+  }
+
+  .court-grid {
+    min-height: 165px;
   }
 
   .player-slot {
@@ -959,8 +1002,22 @@ body {
   }
 
   .player-name,
-  .player-gender-label {
+  .player-gender-label,
+  .player-rotational-position-label {
     font-size: 0.6rem;
+  }
+
+  .player-gender-label,
+  .player-rotational-position-label {
+    right: 0.3rem;
+  }
+
+  .player-gender-label {
+    top: 0.3rem;
+  }
+
+  .player-rotational-position-label {
+    bottom: 0.3rem;
   }
 
   .player-position-badge {
@@ -987,7 +1044,7 @@ body {
     gap: 1rem;
   }
 
-  .arena {
+  .are {
     gap: 0.5rem;
   }
 
@@ -1002,7 +1059,6 @@ body {
   }
 
   .court {
-    min-height: 240px;
     border-radius: var(--radius-sm);
   }
 
@@ -1042,8 +1098,22 @@ body {
   }
 
   .player-name,
-  .player-gender-label {
+  .player-gender-label,
+  .player-rotational-position-label {
     font-size: 0.55rem;
+  }
+
+  .player-gender-label,
+  .player-rotational-position-label {
+    right: 0.25rem;
+  }
+
+  .player-gender-label {
+    top: 0.25rem;
+  }
+
+  .player-rotational-position-label {
+    bottom: 0.25rem;
   }
 
   .player-position-badge {
@@ -1056,7 +1126,6 @@ body {
   }
 
   .sub-bench {
-    width: 70px;
     padding: 0.4rem;
     gap: 0.4rem;
     border-radius: var(--radius-sm);
@@ -1068,13 +1137,16 @@ body {
   }
 
   .sub-add-btn {
-    min-height: 40px;
+    min-height: 52px;
     font-size: 0.9rem;
+  }
+
+  .subs-slots {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   }
 
   .controls {
     padding: 0.75rem;
-    gap: 0.75rem;
     border-radius: var(--radius-sm);
   }
 
@@ -1193,12 +1265,8 @@ body {
     font-size: 0.7rem;
   }
 
-  .arena {
+  .are {
     gap: 0.25rem;
-  }
-
-  .court {
-    min-height: 180px;
   }
 
   .court-rotation-label {
@@ -1218,6 +1286,7 @@ body {
   .court-grid {
     gap: 0.25rem;
     padding: 0 0.4rem 0.4rem;
+    min-height: 150px;
   }
 
   .player-slot {
@@ -1231,7 +1300,8 @@ body {
   }
 
   .player-name,
-  .player-gender-label {
+  .player-gender-label,
+  .player-rotational-position-label {
     font-size: 0.5rem;
   }
 
@@ -1241,7 +1311,6 @@ body {
   }
 
   .sub-bench {
-    width: 55px;
     padding: 0.25rem;
     gap: 0.25rem;
   }
@@ -1252,7 +1321,7 @@ body {
   }
 
   .sub-add-btn {
-    min-height: 35px;
+    min-height: 48px;
     font-size: 0.8rem;
   }
 

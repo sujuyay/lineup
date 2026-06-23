@@ -10,12 +10,8 @@ interface DraggablePlayerSlotProps {
   canDrop?: boolean;
   isBeingDragged?: boolean;
   isValidDropTarget?: boolean;
-  showGender?: boolean;
-}
-
-function truncateName(name: string, maxLength: number = 6): string {
-  if (name.length <= maxLength) return name;
-  return name.slice(0, maxLength - 1) + '…';
+  showMeta?: boolean;
+  rotationalPosition?: number;
 }
 
 export function DraggablePlayerSlot({
@@ -26,7 +22,8 @@ export function DraggablePlayerSlot({
   canDrop = true,
   isBeingDragged = false,
   isValidDropTarget = true,
-  showGender = false,
+  showMeta = false,
+  rotationalPosition,
 }: DraggablePlayerSlotProps) {
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({
     id,
@@ -86,12 +83,19 @@ export function DraggablePlayerSlot({
             </div>
           )}
           <span className="player-name" title={player.name}>
-            {truncateName(player.name)}
+            {player.name}
           </span>
-          {showGender && (
-            <span className="player-gender-label">
-              {player.gender === 'female' ? '[F]' : '[M]'}
-            </span>
+          {showMeta && (
+            <>
+              <span className="player-gender-label">
+                {player.gender === 'female' ? 'F' : 'M'}
+              </span>
+              {rotationalPosition !== undefined && (
+                <span className="player-rotational-position-label">
+                  {rotationalPosition}
+                </span>
+              )}
+            </>
           )}
         </>
       ) : (

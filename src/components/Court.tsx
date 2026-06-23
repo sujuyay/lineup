@@ -3,6 +3,7 @@ import { DraggablePlayerSlot } from './DraggablePlayerSlot';
 
 interface CourtProps {
     court: (Player | null)[];
+    rotationalPositions: (number | undefined)[];
     onSlotClick: (slotIndex: number) => void;
     draggingPlayerId?: string | null;
     canDropOnId: (id: string) => boolean;
@@ -15,6 +16,7 @@ interface CourtProps {
 // below. Slots fill the grid row-major in order.
 export function Court({
     court,
+    rotationalPositions,
     onSlotClick,
     draggingPlayerId,
     canDropOnId,
@@ -56,7 +58,8 @@ export function Court({
                             canDrop={true}
                             isBeingDragged={isBeingDragged || false}
                             isValidDropTarget={canDropOnId(`court-${i}`)}
-                            showGender={true}
+                            showMeta={true}
+                            rotationalPosition={rotationalPositions[i]}
                         />
                     );
                 })}
