@@ -2,7 +2,7 @@
    exported (at the bottom) for unit testing. That trips react-refresh's
    "only export components" rule, which is a dev-only fast-refresh concern. */
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import type { Player } from './types';
@@ -723,11 +723,20 @@ function expandLineup(share: ShareLineup, autoFulfill: boolean): Lineup {
 interface AppProps {
   /** Override any subset of the default settings (e.g. when used as a package). */
   settings?: DeepPartial<LineupSettings>;
+  /**
+   * Called for every analytics event (e.g. 'lineup_created'). Plug in any
+   * provider here - each consuming site supplies its own, so tracking is fully
+   * separate from the standalone build's analytics. Omit to disable tracking.
+   */
+  onTrack?: (event: string, data?: Record<string, unknown>) => void;
 }
 
-function App({ settings: settingsOverride }: AppProps = {}) {
+function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // Merge + validate consumer overrides exactly once, on first mount.
   const [settings] = useState(() => resolveSettings(settingsOverride));
+
+  // Route analytics events to the consumer-supplied sink (no-op if none).
+  const track = onTrack ?? (() => {});
 
   // Compute the initial state once. A lineup shared via the URL is imported into
   // the first empty slot; if every slot is in use, it's queued (pendingShare) so
@@ -737,7 +746,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     const activeIndex = loadActiveIndex();
     const shared = readSharedLineup();
     const imported = shared ? expandLineup(shared, settings.minGirls.autoFulfill) : null;
-    if (!imported) return { lineups: stored, activeIndex, pending: null as Lineup | null };
+    if (!imported) return { lineups: stored, activeIndex, pending: null as Lineup | null, autoImported: false };
 
     const emptyIndex = stored.findIndex(isEmptyLineup);
     if (emptyIndex >= 0) {
@@ -745,10 +754,11 @@ function App({ settings: settingsOverride }: AppProps = {}) {
         lineups: stored.map((lineup, i) => (i === emptyIndex ? imported : lineup)),
         activeIndex: emptyIndex,
         pending: null as Lineup | null,
+        autoImported: true,
       };
     }
     // No free slot - keep existing data and ask before overwriting one.
-    return { lineups: stored, activeIndex, pending: imported };
+    return { lineups: stored, activeIndex, pending: imported, autoImported: false };
   });
 
   const [activeLineupIndex, setActiveLineupIndex] = useState(boot.activeIndex);
@@ -795,6 +805,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
   // One tracker step per stored rotation (which is derived from court + both
   // side benches). Hidden until the lineup has players.
   const rotationCount = Object.keys(roster).length > 0 ? currentLineup.rotations.length : 0;
+  const canRotate = rotationCount >= 6;
 
   // Pick which phase to show when navigating to a rotation: prefer the invalid
   // phase so problems are visible. Default to serve (incl. when both are invalid
@@ -816,6 +827,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     setLineups((prev) => prev.map((lineup, i) => (i === activeLineupIndex ? pendingShare : lineup)));
     setPendingShare(null);
     viewRotation(0);
+    track('shared_lineup_imported', { target: 'replaced' });
   };
 
   const handleImportCancel = () => setPendingShare(null);
@@ -827,6 +839,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
       i === activeLineupIndex ? hydrateFrom({ ...lineup, minGirls: min }, 0, 'serve', settings.minGirls.autoFulfill) : lineup
     ));
   const setRotationMethod = (method: 'bench' | 'substitutions') => {
+    track('rotation_method_changed', { method });
     setActiveRotation(0);
     setLineups(prev => prev.map((lineup, i) => {
       if (i !== activeLineupIndex || lineup.rotationMethod === method) return lineup;
@@ -868,6 +881,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
     // The shared lineup (read in the initializer) was imported; strip the param so
     // a refresh doesn't re-import it over later edits.
     clearShareParam();
+    if (boot.autoImported) track('shared_lineup_imported', { target: 'empty_slot' });
 
     // Apply the (overridable) colour scheme to the document's CSS variables once on
     // mount. `settings` is created once in a useState initializer and never changes.
@@ -890,6 +904,7 @@ function App({ settings: settingsOverride }: AppProps = {}) {
       await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 2000);
+      track('share_link_copied');
     } catch {
       // Clipboard unavailable (e.g. denied permissions) - nothing to do.
     }
@@ -985,6 +1000,13 @@ function App({ settings: settingsOverride }: AppProps = {}) {
       ...playerData,
     };
 
+    // Adding a brand-new player (vs. editing one). The first such add to an empty
+    // lineup counts as creating a lineup.
+    if (!existingPlayer) {
+      if (isEmptyLineup(currentLineup)) track('lineup_created');
+      track('player_added', { position: playerData.position ?? 'none' });
+    }
+
     const appendOrReplace = (prev: Player[]) =>
       editingSlot.index >= prev.length
         ? [...prev, player]
@@ -1038,14 +1060,55 @@ function App({ settings: settingsOverride }: AppProps = {}) {
 
   // Step the viewed rotation forward/backward through the stored rotations,
   // wrapping around. Keeps the current serve/receive phase.
-  const handleRotate = (direction: 'forward' | 'backward') => {
-    const total = currentLineup.rotations.length;
-    if (total <= 1) return;
-    setActiveRotation((prev) =>
-      direction === 'forward' ? (prev + 1) % total : (prev - 1 + total) % total
-    );
-    setActivePhase('serve');
-  };
+  // Step through serve/receive phases: forward shows a rotation's receive (when
+  // it differs from serve) before advancing to the next rotation's serve.
+  // Memoised so the arrow-key effect doesn't re-subscribe every render.
+  const handleRotate = useCallback((direction: 'forward' | 'backward') => {
+    const rotations = currentLineup.rotations;
+    const total = rotations.length;
+    if (total === 0) return;
+
+    // Whether a rotation's receive court differs from its serve court.
+    const phasesDiffer = (index: number) => {
+      const rot = rotations[index];
+      const ids = (r: Rotation) => r.court.map((c) => c.playerId).join(',');
+      return !!rot && ids(rot.serve) !== ids(rot.receive);
+    };
+
+    if (direction === 'forward') {
+      if (activePhase === 'serve' && phasesDiffer(activeRotation)) {
+        setActivePhase('receive');
+      } else {
+        setActiveRotation((activeRotation + 1) % total);
+        setActivePhase('serve');
+      }
+      return;
+    }
+
+    if (activePhase === 'receive') {
+      setActivePhase('serve');
+    } else {
+      const prev = (activeRotation - 1 + total) % total;
+      setActiveRotation(prev);
+      setActivePhase(phasesDiffer(prev) ? 'receive' : 'serve');
+    }
+  }, [currentLineup, activeRotation, activePhase]);
+
+  // Left/right arrow keys rotate backward/forward (when rotating is allowed and
+  // focus isn't in a form field or modal).
+  useEffect(() => {
+    if (!canRotate) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (modalOpen || resetModalOpen || pendingShare) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
+      e.preventDefault();
+      handleRotate(e.key === 'ArrowLeft' ? 'backward' : 'forward');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canRotate, modalOpen, resetModalOpen, pendingShare, handleRotate]);
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -1401,8 +1464,9 @@ function App({ settings: settingsOverride }: AppProps = {}) {
               minGirls={minGirls}
               onMinGirlsChange={setMinGirls}
               onRotate={handleRotate}
-              canRotate={rotationCount >= 6}
+              canRotate={canRotate}
               rotationNumber={activeRotation + 1}
+              phase={activePhase}
               rotationMethod={rotationMethod}
               onRotationMethodChange={setRotationMethod}
               onReset={handleResetClick}

@@ -6,6 +6,7 @@ interface ControlsProps {
     onRotate: (direction: 'forward' | 'backward') => void;
     canRotate: boolean;
     rotationNumber: number;
+    phase: 'serve' | 'receive';
     rotationMethod: 'bench' | 'substitutions';
     onRotationMethodChange: (method: 'bench' | 'substitutions') => void;
     onReset: () => void;
@@ -19,6 +20,7 @@ export function Controls({
     onRotate,
     canRotate,
     rotationNumber,
+    phase,
     rotationMethod,
     onRotationMethodChange,
     onReset,
@@ -32,7 +34,7 @@ export function Controls({
                 <label className="label-large">Rotate</label>
                 <div className="rotate-input">
                     <button onClick={() => onRotate('backward')} disabled={!canRotate}>&lt;</button>
-                    <span className="rotate-number">R{rotationNumber}</span>
+                    <span className="rotate-number">R{rotationNumber}:{phase === 'serve' ? 'S' : 'R'}</span>
                     <button onClick={() => onRotate('forward')} disabled={!canRotate}>&gt;</button>
                 </div>
                 {rotationNumber > 1 && (

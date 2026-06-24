@@ -561,7 +561,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 110px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
   padding: 0.25rem;
@@ -1198,10 +1197,6 @@ body {
   .number-input span {
     font-size: 1rem;
     min-width: 2rem;
-  }
-
-  .rotate-input {
-    width: 95px;
   }
 
   /* Modal mobile */
