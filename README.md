@@ -51,8 +51,8 @@ npm run build:lib   # emits ./lib (index.js, index.d.ts, style.css)
 Then in a consuming app:
 
 ```tsx
-import { LineupSimulator } from '@sujuyay/lineup';
-import '@sujuyay/lineup/style.css';
+import { LineupSimulator } from '@jkim430/lineup';
+import '@jkim430/lineup/style.css';
 
 export function App() {
   return (
