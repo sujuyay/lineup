@@ -40,6 +40,9 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* Positioning context for the toast overlay, so it stays within the app
+     rather than the viewport (avoids overlaying a host page's header). */
+  position: relative;
 }
 
 /* ===== HEADER ===== */
@@ -904,7 +907,9 @@ body {
 
 /* ===== TOAST ===== */
 .toast-container {
-  position: fixed;
+  /* Anchored to .app (its positioning context), not the viewport, so it doesn't
+     overlay a host page's header when embedded. */
+  position: absolute;
   top: 1.5rem;
   left: 1rem;
   right: 1rem;
