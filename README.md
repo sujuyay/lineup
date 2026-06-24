@@ -40,6 +40,45 @@ npm run build
 npm run deploy
 ```
 
+## Use as a package
+
+This repo doubles as a reusable React component. Build the library output with:
+
+```bash
+npm run build:lib   # emits ./lib (index.js, index.d.ts, style.css)
+```
+
+Then in a consuming app:
+
+```tsx
+import { LineupSimulator } from '@sujuyay/lineup';
+import '@sujuyay/lineup/style.css';
+
+export function App() {
+  return (
+    <LineupSimulator
+      // All optional; deeply-merged over the defaults.
+      settings={{
+        minGirls: { default: 1 },
+        maxRosterSize: 12,
+        colors: { accentPrimary: '#00d4aa', positions: { setter: '#E6B333' } },
+        validators: { substitutions: [/* custom RotationValidator[] */] },
+      }}
+      // Provide your own analytics sink (or omit to disable).
+      onTrack={(event, data) => myAnalytics.track(event, data)}
+    />
+  );
+}
+```
+
+`react` and `react-dom` are peer dependencies (the consumer provides them);
+`@dnd-kit/*` and `lz-string` are bundled-as-dependencies and externalized, so
+they resolve from the consumer's `node_modules`. Each consuming site supplies
+its own `onTrack`, so analytics are fully separate from this repo's site.
+
+Exported types include `LineupSettings`, `DeepPartial`, `ColorScheme`,
+`RotationValidator`, `MethodValidators`, and `Player`/`Position`.
+
 ## Tech Stack
 
 - React 19

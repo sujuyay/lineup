@@ -452,7 +452,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.75rem;
+  padding: 0.5rem;
   background: var(--bg-tertiary);
   border: 2px dotted var(--text-muted);
   border-radius: var(--radius-sm);
@@ -460,7 +460,6 @@ body {
   font-size: 1.25rem;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-height: 74px;
   width: 100%;
 }
 
@@ -1003,7 +1002,6 @@ body {
   }
 
   .sub-add-btn {
-    min-height: 52px;
     font-size: 1rem;
   }
 
@@ -1162,7 +1160,6 @@ body {
   }
 
   .sub-add-btn {
-    min-height: 52px;
     font-size: 0.9rem;
   }
 
@@ -1341,7 +1338,6 @@ body {
   }
 
   .sub-add-btn {
-    min-height: 48px;
     font-size: 0.8rem;
   }
 
