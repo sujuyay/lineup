@@ -18,6 +18,7 @@ import {
   hydrateFrom,
   minimizeLineup,
   expandLineup,
+  enforceMinGirls,
 } from './utils';
 import type { View, SlotRef } from './types';
 import { DEFAULT_SETTINGS } from './config';
@@ -38,6 +39,26 @@ describe('createEmptyLineup / isEmptyLineup', () => {
   it('reports a lineup with players as non-empty', () => {
     const l = lineup('bench', roster(player('a')), rotation(['a', '', '', '', '', '']));
     expect(isEmptyLineup(l)).toBe(false);
+  });
+});
+
+describe('enforceMinGirls', () => {
+  const editable = { ...SETTINGS, minGirls: { ...SETTINGS.minGirls, default: 2, editable: true } };
+  const locked = { ...SETTINGS, minGirls: { ...SETTINGS.minGirls, default: 2, editable: false } };
+  const withMinGirls = (min: number) =>
+    lineup('bench', roster(player('a')), rotation(['a', '', '', '', '', '']), min);
+
+  it('leaves the stored value alone when editable', () => {
+    expect(enforceMinGirls(withMinGirls(5), editable).minGirls).toBe(5);
+  });
+
+  it('overrides the stored value with the default when not editable', () => {
+    expect(enforceMinGirls(withMinGirls(5), locked).minGirls).toBe(2);
+  });
+
+  it('returns the lineup unchanged when not editable but already at the default', () => {
+    const l = withMinGirls(2);
+    expect(enforceMinGirls(l, locked)).toBe(l);
   });
 });
 

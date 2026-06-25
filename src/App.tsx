@@ -12,6 +12,7 @@ import {
   loadFromStorage,
   loadActiveIndex,
   expandLineup,
+  enforceMinGirls,
   isEmptyLineup,
   createEmptyLineup,
   resolveView,
@@ -68,7 +69,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     const stored = loadFromStorage(settings);
     const activeIndex = loadActiveIndex();
     const shared = readSharedLineup();
-    const imported = shared ? expandLineup(shared, settings.minGirls.autoFulfill) : null;
+    const imported = shared ? enforceMinGirls(expandLineup(shared, settings.minGirls.autoFulfill), settings) : null;
     if (!imported) return { lineups: stored, activeIndex, pending: null as Lineup | null, autoImported: false };
 
     const emptyIndex = stored.findIndex(isEmptyLineup);

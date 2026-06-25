@@ -372,6 +372,14 @@ export function pruneRoster(roster: Record<string, Player>, rotations: Lineup['r
   return pruned;
 }
 
+// When minGirls isn't user-editable, the control to change it isn't shown, so
+// any value carried in by stored or shared data is meaningless - force it back
+// to the configured default.
+export function enforceMinGirls(lineup: Lineup, settings: LineupSettings): Lineup {
+  if (settings.minGirls.editable) return lineup;
+  return { ...lineup, minGirls: settings.minGirls.default };
+}
+
 export function loadFromStorage(settings: LineupSettings): Lineup[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -382,7 +390,7 @@ export function loadFromStorage(settings: LineupSettings): Lineup[] {
         while (lineups.length < settings.numLineups) {
           lineups.push(createEmptyLineup(settings));
         }
-        return lineups;
+        return lineups.map((l) => enforceMinGirls(l, settings));
       }
     }
   } catch (e) {
