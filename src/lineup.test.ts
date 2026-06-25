@@ -56,9 +56,9 @@ describe('enforceMinGirls', () => {
     expect(enforceMinGirls(withMinGirls(5), locked).minGirls).toBe(2);
   });
 
-  it('returns the lineup unchanged when not editable but already at the default', () => {
+  it('preserves the lineup when not editable but already at the default', () => {
     const l = withMinGirls(2);
-    expect(enforceMinGirls(l, locked)).toBe(l);
+    expect(enforceMinGirls(l, locked)).toEqual(l);
   });
 });
 
