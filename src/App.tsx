@@ -98,15 +98,24 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const { minGirls, roster, rotationMethod } = currentLineup;
 
   // Resolve the active rotation to player objects for the UI / drag logic.
-  const { court, leftBench, rightBench, liberoBench, subsBench, validation } = resolveView(currentLineup, activeRotation, activePhase, settings);
+  // Memoised: resolveView runs validation, and this otherwise recomputes on
+  // every render (including the rapid drag-state updates during a drag).
+  const { court, leftBench, rightBench, liberoBench, subsBench, validation } = useMemo(
+    () => resolveView(currentLineup, activeRotation, activePhase, settings),
+    [currentLineup, activeRotation, activePhase, settings],
+  );
   const courtRotationalPositions = currentLineup.rotations[activeRotation]?.[activePhase]?.court.map((c) => c.rotationalPosition) ?? [];
 
   // Per-rotation validity for the tracker (red border on invalid rotations).
   // A rotation is flagged invalid if either its serve or receive formation fails.
-  const rotationValidity = currentLineup.rotations.map(
-    (_, i) =>
-      validateRotation(currentLineup, i, 'serve', settings).valid &&
-      validateRotation(currentLineup, i, 'receive', settings).valid,
+  // Memoised since it runs validateRotation twice per rotation.
+  const rotationValidity = useMemo(
+    () => currentLineup.rotations.map(
+      (_, i) =>
+        validateRotation(currentLineup, i, 'serve', settings).valid &&
+        validateRotation(currentLineup, i, 'receive', settings).valid,
+    ),
+    [currentLineup, settings],
   );
 
   // Players can only be added/edited/removed from the first rotation (both
