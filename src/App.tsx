@@ -754,7 +754,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               <div className="arena-section">
                 <div style={{ gridColumn: 'span 1' }}>
                   <Bench
-                    label="LIBERO"
+                    label={liberoBench && liberoBench.position !== 'libero' ? 'LIB OUT' : 'LIBERO'}
                     labelClassName="libero-bench-label"
                     slotsClassName="libero-slot"
                     players={liberoBench ? [liberoBench] : []}
