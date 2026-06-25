@@ -357,11 +357,10 @@ body {
   white-space: nowrap;
 }
 
-/* Corner labels on a player card: gender top-right, rotational position bottom-right. */
+/* Corner labels on a player card: gender top-left, rotational position bottom-right. */
 .player-gender-label,
 .player-rotational-position-label {
   position: absolute;
-  right: 0.4rem;
   font-size: 0.8rem;
   font-weight: 700;
   white-space: nowrap;
@@ -369,11 +368,13 @@ body {
 }
 
 .player-gender-label {
-  top: 0.4rem;
+  top: 0.25rem;
+  left: 0.25rem;
 }
 
 .player-rotational-position-label {
-  bottom: 0.4rem;
+  bottom: 0.25rem;
+  right: 0.25rem;
 }
 
 .player-name {
@@ -1050,17 +1051,14 @@ body {
     font-size: 0.6rem;
   }
 
-  .player-gender-label,
-  .player-rotational-position-label {
-    right: 0.3rem;
-  }
-
   .player-gender-label {
-    top: 0.3rem;
+    top: 0.15rem;
+    left: 0.15rem;
   }
 
   .player-rotational-position-label {
-    bottom: 0.3rem;
+    bottom: 0.15rem;
+    right: 0.15rem;
   }
 
   .player-position-badge {
@@ -1145,17 +1143,14 @@ body {
     font-size: 0.55rem;
   }
 
-  .player-gender-label,
-  .player-rotational-position-label {
-    right: 0.25rem;
-  }
-
   .player-gender-label {
-    top: 0.25rem;
+    top: 0.1rem;
+    left: 0.1rem;
   }
 
   .player-rotational-position-label {
-    bottom: 0.25rem;
+    bottom: 0.1rem;
+    right: 0.1rem;
   }
 
   .player-position-badge {

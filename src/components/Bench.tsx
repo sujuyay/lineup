@@ -51,6 +51,7 @@ export function Bench({
                         canDrop={true}
                         isBeingDragged={draggingPlayerId === player.id}
                         isValidDropTarget={canDropOnId(slotId(index))}
+                        showMeta={true}
                     />
                 ))}
                 {canAdd && (
