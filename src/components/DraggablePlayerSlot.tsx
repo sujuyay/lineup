@@ -40,6 +40,8 @@ export function DraggablePlayerSlot({
 
   const { colors } = useSettings();
   const positionColor = player?.position ? colors.positions[player.position] : '#4a5568';
+  // Opaque per-position card background (a lighter tint of the border colour).
+  const slotBackground = player?.position ? colors.positionBackgrounds[player.position] : 'var(--bg-tertiary)';
 
   // Combine refs
   const setRefs = (node: HTMLDivElement | null) => {
@@ -69,7 +71,7 @@ export function DraggablePlayerSlot({
       onClick={onClick}
       style={{
         borderColor: player ? positionColor : undefined,
-        background: player ? `linear-gradient(135deg, ${positionColor}22, ${positionColor}44)` : undefined,
+        background: player ? slotBackground : undefined,
       }}
       {...listeners}
       {...attributes}

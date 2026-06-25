@@ -71,53 +71,53 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                             onClick={() => setGender('male')}
                             disabled={disabled}
                         >
-                            ♂ Male
+                            Male
                         </button>
                         <button
                             className={`gender-btn ${gender === 'female' ? 'active female' : ''}`}
                             onClick={() => setGender('female')}
                             disabled={disabled}
                         >
-                            ♀ Female
+                            Female
                         </button>
                     </div>
                 </div>
 
                 {!isLibero && (
-                <div className="form-group">
-                    <label>Position</label>
-                    <div className="position-buttons">
-                        {POSITIONS.map((pos) => (
-                            <button
-                                key={pos}
-                                className={`position-btn ${position === pos ? 'active' : ''}`}
-                                onClick={() => setPosition(position === pos ? null : pos)}
-                                disabled={disabled}
-                                style={{
-                                    '--position-color': colors.positions[pos],
-                                    backgroundColor: position === pos ? colors.positions[pos] : undefined,
-                                } as React.CSSProperties}
-                            >
-                                {POSITION_LABELS[pos]}
-                            </button>
-                        ))}
+                    <div className="form-group">
+                        <label>Position</label>
+                        <div className="position-buttons">
+                            {POSITIONS.map((pos) => (
+                                <button
+                                    key={pos}
+                                    className={`position-btn ${position === pos ? 'active' : ''}`}
+                                    onClick={() => setPosition(position === pos ? null : pos)}
+                                    disabled={disabled}
+                                    style={{
+                                        '--position-color': colors.positions[pos],
+                                        backgroundColor: position === pos ? colors.positions[pos] : undefined,
+                                    } as React.CSSProperties}
+                                >
+                                    {POSITION_LABELS[pos]}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
                 )}
 
                 {!disabled && (
-                <div className="modal-actions">
-                    {existingPlayer && onRemove ? (
-                        <button className="btn-remove" onClick={onRemove}>
-                            Remove
+                    <div className="modal-actions">
+                        {existingPlayer && onRemove ? (
+                            <button className="btn-remove" onClick={onRemove}>
+                                Remove
+                            </button>
+                        ) : (
+                            <div />
+                        )}
+                        <button className="btn-save" onClick={handleSave} disabled={!name.trim()}>
+                            {existingPlayer ? 'Update' : 'Add'}
                         </button>
-                    ) : (
-                        <div />
-                    )}
-                    <button className="btn-save" onClick={handleSave} disabled={!name.trim()}>
-                        {existingPlayer ? 'Update' : 'Add'}
-                    </button>
-                </div>
+                    </div>
                 )}
             </div>
         </div>

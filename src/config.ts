@@ -1,10 +1,11 @@
 import { createContext, useContext } from 'react';
-import type { Lineup, Phase } from './App';
-import type { Position } from './types';
+import type { Lineup, Phase, Position } from './types';
 import { POSITION_COLORS } from './types';
 
 /** The app always fields a full volleyball lineup of six players on court. */
 export const PLAYER_COUNT = 6;
+
+export type Theme = 'dark' | 'light';
 
 /** The full overridable colour scheme. */
 export interface ColorScheme {
@@ -16,18 +17,22 @@ export interface ColorScheme {
   textPrimary: string;
   textSecondary: string;
   textMuted: string;
+  /** Colour of the "Lineup Simulator" title. */
+  titleColor: string;
   accentPrimary: string;
   accentSecondary: string;
   male: string;
   female: string;
   danger: string;
-  /** Per-position swatch colours. */
+  /** Per-position swatch / card-border colours. */
   positions: Record<Position, string>;
+  /** Per-position opaque card backgrounds (a lighter tint of the border colour). */
+  positionBackgrounds: Record<Position, string>;
 }
 
-// Maps each ColorScheme key to the CSS custom property it drives. `positions` is
-// applied separately (inline, per player), so it's not in this table.
-export const COLOR_CSS_VARS: Record<Exclude<keyof ColorScheme, 'positions'>, string> = {
+// Maps each ColorScheme key to the CSS custom property it drives. The per-position
+// maps are applied inline per player, so they're excluded from this table.
+export const COLOR_CSS_VARS: Record<Exclude<keyof ColorScheme, 'positions' | 'positionBackgrounds'>, string> = {
   bgPrimary: '--bg-primary',
   bgSecondary: '--bg-secondary',
   bgTertiary: '--bg-tertiary',
@@ -36,6 +41,7 @@ export const COLOR_CSS_VARS: Record<Exclude<keyof ColorScheme, 'positions'>, str
   textPrimary: '--text-primary',
   textSecondary: '--text-secondary',
   textMuted: '--text-muted',
+  titleColor: '--title-color',
   accentPrimary: '--accent-primary',
   accentSecondary: '--accent-secondary',
   male: '--male-color',
@@ -52,12 +58,23 @@ const DEFAULT_COLORS: ColorScheme = {
   textPrimary: '#f0f4f8',
   textSecondary: '#8899a6',
   textMuted: '#657786',
+  titleColor: '#f0f4f8',
   accentPrimary: '#00d4aa',
   accentSecondary: '#00b894',
   male: '#4dabf7',
   female: '#f06595',
   danger: '#e74c3c',
   positions: POSITION_COLORS,
+  // Opaque equivalents of each position colour blended onto the dark background
+  // (~25%), matching the previous semi-transparent card tint.
+  positionBackgrounds: {
+    setter: '#453c20',
+    outside_hitter: '#18294c',
+    opposite_hitter: '#4b2a2a',
+    libero: '#17422f',
+    middle_blocker: '#322540',
+    defensive_specialist: '#452f1b',
+  },
 };
 
 /**
@@ -115,6 +132,8 @@ export interface LineupSettings {
   validators: MethodValidators;
   /** Overridable colour scheme (CSS variables + per-position swatches). */
   colors: ColorScheme;
+  /** Theme used on first load (before the user toggles / a stored preference exists). */
+  defaultTheme: Theme;
 }
 
 export const DEFAULT_SETTINGS: LineupSettings = {
@@ -124,6 +143,7 @@ export const DEFAULT_SETTINGS: LineupSettings = {
   numLineups: 6,
   validators: { bench: [], substitutions: [] },
   colors: DEFAULT_COLORS,
+  defaultTheme: 'dark',
 };
 
 /**
@@ -150,7 +170,9 @@ export function resolveSettings(
         ...DEFAULT_SETTINGS.colors,
         ...overrides.colors,
         positions: { ...DEFAULT_SETTINGS.colors.positions, ...overrides.colors?.positions },
+        positionBackgrounds: { ...DEFAULT_SETTINGS.colors.positionBackgrounds, ...overrides.colors?.positionBackgrounds },
       },
+      defaultTheme: overrides.defaultTheme ?? DEFAULT_SETTINGS.defaultTheme,
     };
   validateSettings(settings);
   return settings;

@@ -1,4 +1,5 @@
 import { useSettings, PLAYER_COUNT } from '../config';
+import type { Theme } from '../config';
 
 interface ControlsProps {
     minGirls: number;
@@ -9,6 +10,8 @@ interface ControlsProps {
     phase: 'serve' | 'receive';
     rotationMethod: 'bench' | 'substitutions';
     onRotationMethodChange: (method: 'bench' | 'substitutions') => void;
+    theme: Theme;
+    onThemeChange: (theme: Theme) => void;
     onReset: () => void;
     showReset: boolean;
     lineupNumber: number;
@@ -23,6 +26,8 @@ export function Controls({
     phase,
     rotationMethod,
     onRotationMethodChange,
+    theme,
+    onThemeChange,
     onReset,
     showReset,
     lineupNumber,
@@ -43,7 +48,7 @@ export function Controls({
             </div>
 
             <div className="control-group">
-                <label>Rotation Method</label>
+                <label className="label-large">Rotation Method</label>
                 <div className="method-toggle">
                     <button
                         type="button"
@@ -69,7 +74,7 @@ export function Controls({
 
             {minGirlsBounds.editable && (
                 <div className="control-group">
-                    <label>Min Females</label>
+                    <label className="label-large">Min Females</label>
                     <div className="number-input">
                         <button
                             onClick={() => onMinGirlsChange(Math.max(minGirlsBounds.min, minGirls - 1))}
@@ -87,6 +92,26 @@ export function Controls({
                     </div>
                 </div>
             )}
+
+            <div className="control-group">
+                <label className="label-large">Theme</label>
+                <div className="method-toggle">
+                    <button
+                        type="button"
+                        className={`method-option ${theme === 'dark' ? 'active' : ''}`}
+                        onClick={() => onThemeChange('dark')}
+                    >
+                        DARK
+                    </button>
+                    <button
+                        type="button"
+                        className={`method-option ${theme === 'light' ? 'active' : ''}`}
+                        onClick={() => onThemeChange('light')}
+                    >
+                        LIGHT
+                    </button>
+                </div>
+            </div>
 
             {showReset && (
                 <button className="btn-reset" onClick={onReset}>

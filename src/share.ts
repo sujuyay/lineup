@@ -1,6 +1,5 @@
 import LZString from 'lz-string';
-import type { Rotation } from './App';
-import type { Player, Position, Gender } from './types';
+import type { Rotation, Player, Position, Gender } from './types';
 
 /** URL query param that carries a shared lineup. */
 export const SHARE_PARAM = 'l';

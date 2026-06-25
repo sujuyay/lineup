@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import LZString from 'lz-string';
 import { encodeLineup, decodeLineup } from './share';
-import { minimizeLineup, expandLineup, hydrateFrom } from './App';
+import { minimizeLineup, expandLineup, hydrateFrom } from './utils';
 import { player, roster, rotation, lineup, courtIds } from './testHelpers';
 
 function sampleLineup() {

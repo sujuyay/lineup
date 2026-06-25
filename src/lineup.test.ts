@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { COURT_ROTATIONAL_POSITIONS, ROTATION_MAP } from './constants';
 import {
-  COURT_ROTATIONAL_POSITIONS,
-  ROTATION_MAP,
   createEmptyRotation,
   createEmptyLineup,
   isEmptyLineup,
@@ -19,8 +18,8 @@ import {
   hydrateFrom,
   minimizeLineup,
   expandLineup,
-} from './App';
-import type { View, SlotRef } from './App';
+} from './utils';
+import type { View, SlotRef } from './types';
 import { DEFAULT_SETTINGS } from './config';
 import { player, roster, rotation, lineup, courtIds } from './testHelpers';
 

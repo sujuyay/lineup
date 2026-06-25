@@ -5,7 +5,7 @@
 import './App.css';
 
 export { default as LineupSimulator } from './App';
-export type { Lineup, Rotation, Phase } from './App';
+export type { Lineup, Rotation, Phase } from './types';
 
 export { DEFAULT_SETTINGS, PLAYER_COUNT } from './config';
 export type {

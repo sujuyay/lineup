@@ -1,5 +1,4 @@
-import type { Player, Position, Gender } from './types';
-import type { Lineup, Rotation } from './App';
+import type { Player, Position, Gender, Lineup, Rotation } from './types';
 
 /** Build a player; name defaults to the id. */
 export function player(id: string, gender: Gender = 'male', position: Position | null = null): Player {
