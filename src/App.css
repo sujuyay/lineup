@@ -912,39 +912,50 @@ body {
 
 /* ===== TOAST ===== */
 .toast-container {
-  /* Fixed to the bottom of the viewport so it stays in view while scrolling and
-     never overlaps a host page's header. */
-  position: fixed;
-  bottom: 1.5rem;
-  left: 1rem;
-  right: 1rem;
-  z-index: 2000;
   display: flex;
   justify-content: center;
 }
 
 .toast {
-  padding: 0.65rem 1.1rem;
+  padding: 0.5rem;
   background: var(--danger);
   border-radius: var(--radius-sm);
   color: white;
-  font-size: 0.95rem;
+  font-size: 0.75rem;
   text-align: center;
   box-shadow: var(--shadow);
   /* Never intercept pointer/drag events. */
   pointer-events: none;
 }
 
-/* Success variant (e.g. "Link copied!"). */
-.toast-container.success .toast {
-  background: #1d2b27;
-  border-color: var(--accent-primary);
+/* "Link copied!" confirmation: absolutely positioned just below the Share
+   button, anchored to its relatively-positioned wrapper so it overlays rather
+   than shifting the tab row. */
+.lineup-tab-share-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.share-copied-toast {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  white-space: nowrap;
+}
+
+.share-copied-toast .toast {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
 }
 
 /* Larger, more legible toast on bigger screens. */
 @media (min-width: 768px) {
   .toast {
     padding: 0.85rem 1.5rem;
+    font-size: 0.95rem;
     border-radius: var(--radius);
   }
 }

@@ -246,7 +246,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     try {
       await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
       setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
+      setTimeout(() => setShareCopied(false), 1000);
       track('share_link_copied');
     } catch {
       // Clipboard unavailable (e.g. denied permissions) - nothing to do.
@@ -667,9 +667,16 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
             // The active tab doubles as the share button (once it has players).
             if (isActive && hasPlayers) {
               return (
-                <button key={index} className="lineup-tab active lineup-tab-share" onClick={handleShare}>
-                  Share
-                </button>
+                <div key={index} className="lineup-tab-share-wrap">
+                  {shareCopied && (
+                    <div className="share-copied-toast" role="status">
+                      <Toast messages="Link copied!" />
+                    </div>
+                  )}
+                  <button className="lineup-tab active lineup-tab-share" onClick={handleShare}>
+                    Share
+                  </button>
+                </div>
               );
             }
             return (
@@ -688,9 +695,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
         </div>
 
         <main className="main">
-          {validation && !validation.valid && (
-            <Toast messages={validation.messages} />
-          )}
           <div className="container">
             <RotationTracker
               count={rotationCount}
@@ -781,6 +785,16 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 {activeId ? renderDragOverlay() : null}
               </DragOverlay>
             </DndContext>
+            <div className="toast-container">
+              {/* Inline toast above the controls: the live drag message (why a
+                  hovered target is invalid) takes precedence, otherwise the
+                  current rotation's validation errors. */}
+              {dragToast ? (
+                <Toast messages={dragToast} />
+              ) : validation && !validation.valid ? (
+                <Toast messages={validation.messages} />
+              ) : null}
+            </div>
             <Controls
               minGirls={minGirls}
               onMinGirlsChange={setMinGirls}
@@ -844,18 +858,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {dragToast && (
-          <div className="toast-container" role="status">
-            <Toast messages={dragToast} />
-          </div>
-        )}
-
-        {shareCopied && (
-          <div className="toast-container success" role="status">
-            <Toast messages="Link copied!" />
           </div>
         )}
       </div>
