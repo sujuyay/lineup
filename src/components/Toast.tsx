@@ -9,13 +9,13 @@ interface ToastProps {
 // A small message pill. The caller supplies the wrapping container, so the same
 // pill works as an overlay or inline. Defaults to the danger style; pass
 // variant="info" for a neutral, informational message.
-export function Toast({ messages, variant = 'error' }: ToastProps) {
+export function Toast({ messages, variant }: ToastProps) {
     const lines = (Array.isArray(messages) ? messages : [messages]).filter(Boolean);
     if (lines.length === 0) return null;
 
     return (
         <div className="toast-container">
-            <div className={`toast${variant === 'info' ? ' toast-info' : ''}`}>
+            <div className={`toast ${variant === 'info' ? 'toast-info' : 'toast-error'}`}>
                 {variant === 'info' && <Info size={16} aria-hidden="true" />}
                 {variant === 'error' && <CircleAlert size={16} aria-hidden="true" />}
                 <div>

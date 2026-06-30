@@ -788,9 +788,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 errors, then an informational note when viewing a later rotation
                 (players can only be configured from R1). */}
             {dragToast ? (
-              <Toast messages={dragToast} />
+              <Toast messages={dragToast} variant="error" />
             ) : validation && !validation.valid ? (
-              <Toast messages={validation.messages} />
+              <Toast messages={validation.messages} variant="error" />
             ) : activeRotation > 0 ? (
               <Toast messages="Players can only be configured from R1" variant="info" />
             ) : null}

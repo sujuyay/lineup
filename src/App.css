@@ -1013,9 +1013,7 @@ body {
 
 .toast {
   padding: 0.5rem;
-  background: var(--danger);
   border-radius: var(--radius-sm);
-  color: white;
   font-size: 0.75rem;
   text-align: center;
   box-shadow: var(--shadow);
@@ -1031,6 +1029,12 @@ body {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--text-muted);
+}
+
+.toast.toast-error {
+  background: var(--danger);
+  color: white;
+  border: 1px solid var(--danger);
 }
 
 /* "Link copied!" confirmation: absolutely positioned, centered just above the
