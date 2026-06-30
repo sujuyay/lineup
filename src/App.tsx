@@ -31,7 +31,9 @@ import { buildShareUrl, readSharedLineup, clearShareParam } from './share';
 import { RotationTracker } from './components/RotationTracker';
 import { Toast } from './components/Toast';
 import { Controls } from './components/Controls';
+import { ActionBar } from './components/ActionBar';
 import { AddPlayerModal } from './components/AddPlayerModal';
+import { Settings } from 'lucide-react';
 import './App.css';
 
 interface AppProps {
@@ -95,7 +97,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
   // Get current lineup data
   const currentLineup = lineups[activeLineupIndex];
-  console.log("currentLineup", currentLineup)
   const { minGirls, roster, rotationMethod } = currentLineup;
 
   // Resolve the active rotation to player objects for the UI / drag logic.
@@ -239,6 +240,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const hasPlayers = Object.keys(roster).length > 0;
 
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
   // Copy a shareable URL (the whole lineup, compressed) to the clipboard.
@@ -271,9 +273,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     index: number;
     side?: 'left' | 'right';
   } | null>(null);
-
-  // Check if all court slots are filled
-  const isCourtFull = court.every((player) => player !== null);
 
   // No more players can be added once the roster hits its configured maximum.
   const isRosterFull = Object.keys(roster).length >= settings.maxRosterSize;
@@ -554,20 +553,27 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
       if (liberoDest.type !== 'libero' && !landsOnBackRowCourt) {
         return 'Libero must be back row';
       }
+      // The libero swaps with a court player - it can't fill an empty court slot.
+      if (liberoDest.type === 'court' && !getPlayerFromSlot(liberoDest)) {
+        return 'Libero must replace a player';
+      }
     }
 
     // The remaining rules are the same state checks used to validate any
     // rotation, so simulate the resulting lineup (the swap cascades into later
     // rotations) and reject the swap if the edited rotation fails validation.
-    const after = writeView(
-      currentLineup,
-      swapInView({ court, leftBench, rightBench, liberoBench, subsBench }, source, target),
-      activeRotation,
-      activePhase,
-      settings.minGirls.autoFulfill,
-    );
-    const { valid, messages } = validateRotation(after, activeRotation, activePhase, settings);
-    if (!valid) return messages[0];
+    // Don't block swaps on R1 - any validation errors will still display after the swap.
+    if (activeRotation > 0) {
+      const after = writeView(
+        currentLineup,
+        swapInView({ court, leftBench, rightBench, liberoBench, subsBench }, source, target),
+        activeRotation,
+        activePhase,
+        settings.minGirls.autoFulfill,
+      );
+      const { valid, messages } = validateRotation(after, activeRotation, activePhase, settings);
+      if (!valid) return messages[0];
+    }
 
     return null;
   };
@@ -659,26 +665,18 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
       <div className="app">
         <header className="header">
           <h1><span className="header-emoji">🏐</span> Lineup Simulator</h1>
+          <button
+            className="settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+          >
+            <Settings size={22} aria-hidden="true" />
+          </button>
         </header>
 
         <div className="lineup-tabs">
           {lineups.map((_, index) => {
             const isActive = index === activeLineupIndex;
-            // The active tab doubles as the share button (once it has players).
-            if (isActive && hasPlayers) {
-              return (
-                <div key={index} className="lineup-tab-share-wrap">
-                  {shareCopied && (
-                    <div className="share-copied-toast" role="status">
-                      <Toast messages="Link copied!" />
-                    </div>
-                  )}
-                  <button className="lineup-tab active lineup-tab-share" onClick={handleShare}>
-                    Share
-                  </button>
-                </div>
-              );
-            }
             return (
               <button
                 key={index}
@@ -720,7 +718,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                     onSlotClick={(i) => handleBenchClick('left', i)}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && leftBench.length < settings.maxSizePerBench}
+                    canAdd={!isModalLocked && !isRosterFull && leftBench.length < settings.maxSizePerBench}
                     onAdd={() => handleAddBench('left')}
                   />
                 )}
@@ -746,7 +744,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                     onSlotClick={(i) => handleBenchClick('right', i)}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && rightBench.length < settings.maxSizePerBench}
+                    canAdd={!isModalLocked && !isRosterFull && rightBench.length < settings.maxSizePerBench}
                     onAdd={() => handleAddBench('right')}
                   />
                 )}
@@ -762,7 +760,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                     onSlotClick={handleLiberoClick}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && !liberoBench}
+                    canAdd={!isModalLocked && !isRosterFull && !liberoBench}
                     onAdd={handleLiberoClick}
                   />
                 </div>
@@ -776,7 +774,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                     onSlotClick={handleSubClick}
                     draggingPlayerId={activeDragPlayer?.id}
                     canDropOnId={canDropOnId}
-                    canAdd={isCourtFull && !isModalLocked && !isRosterFull && subsBench.length < settings.maxSizePerBench * 2}
+                    canAdd={!isModalLocked && !isRosterFull && subsBench.length < settings.maxSizePerBench * 2}
                     onAdd={handleAddSub}
                   />
                 )}
@@ -785,33 +783,46 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 {activeId ? renderDragOverlay() : null}
               </DragOverlay>
             </DndContext>
-            <div className="toast-container">
-              {/* Inline toast above the controls: the live drag message (why a
-                  hovered target is invalid) takes precedence, otherwise the
-                  current rotation's validation errors. */}
-              {dragToast ? (
-                <Toast messages={dragToast} />
-              ) : validation && !validation.valid ? (
-                <Toast messages={validation.messages} />
-              ) : null}
-            </div>
-            <Controls
-              minGirls={minGirls}
-              onMinGirlsChange={setMinGirls}
+            {/* Inline toast: the live drag message (why a hovered target is
+                invalid) takes precedence, then the current rotation's validation
+                errors, then an informational note when viewing a later rotation
+                (players can only be configured from R1). */}
+            {dragToast ? (
+              <Toast messages={dragToast} />
+            ) : validation && !validation.valid ? (
+              <Toast messages={validation.messages} />
+            ) : activeRotation > 0 ? (
+              <Toast messages="Players can only be configured from R1" variant="info" />
+            ) : null}
+            <ActionBar
               onRotate={handleRotate}
               canRotate={canRotate}
               rotationNumber={activeRotation + 1}
               phase={activePhase}
-              rotationMethod={rotationMethod}
-              onRotationMethodChange={setRotationMethod}
-              theme={theme}
-              onThemeChange={setTheme}
               onReset={handleResetClick}
-              showReset={hasPlayers}
-              lineupNumber={activeLineupIndex + 1}
+              onShare={handleShare}
+              shareCopied={shareCopied}
+              actionsEnabled={hasPlayers}
             />
           </div>
         </main>
+
+        {settingsOpen && (
+          <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setSettingsOpen(false)}>×</button>
+              <h2>Settings</h2>
+              <Controls
+                minGirls={minGirls}
+                onMinGirlsChange={setMinGirls}
+                rotationMethod={rotationMethod}
+                onRotationMethodChange={setRotationMethod}
+                theme={theme}
+                onThemeChange={setTheme}
+              />
+            </div>
+          </div>
+        )}
 
         <AddPlayerModal
           key={editingSlot ? `${editingSlot.type}-${editingSlot.side ?? ''}-${editingSlot.index}` : 'closed'}

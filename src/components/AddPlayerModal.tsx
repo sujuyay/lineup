@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Info } from 'lucide-react';
 import type { Player, Position, Gender } from '../types';
 import { POSITION_LABELS } from '../types';
 import { useSettings } from '../config';
@@ -102,6 +103,10 @@ export function AddPlayerModal({ isOpen, onClose, onSave, onRemove, existingPlay
                                 </button>
                             ))}
                         </div>
+                        <p className="position-subtext">
+                            <Info size={16} aria-hidden="true" />
+                            <span>Add a libero from the LIBERO section.</span>
+                        </p>
                     </div>
                 )}
 

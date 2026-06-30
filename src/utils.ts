@@ -268,7 +268,7 @@ export function liberoServeViolation(lineup: Lineup): string | null {
     const benchId = serve.liberoBench[0];
     if (!benchId) continue;
     if (servedFor === null) servedFor = benchId;
-    else if (servedFor !== benchId) return 'Libero can only serve for 1 player';
+    else if (servedFor !== benchId) return 'Libero can only serve for 1 position';
   }
   return null;
 }

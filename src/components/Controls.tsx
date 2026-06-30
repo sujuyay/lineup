@@ -1,52 +1,27 @@
+import { Minus, Plus } from 'lucide-react';
 import { useSettings, PLAYER_COUNT } from '../config';
 import type { Theme } from '../config';
 
 interface ControlsProps {
     minGirls: number;
     onMinGirlsChange: (min: number) => void;
-    onRotate: (direction: 'forward' | 'backward') => void;
-    canRotate: boolean;
-    rotationNumber: number;
-    phase: 'serve' | 'receive';
     rotationMethod: 'bench' | 'substitutions';
     onRotationMethodChange: (method: 'bench' | 'substitutions') => void;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
-    onReset: () => void;
-    showReset: boolean;
-    lineupNumber: number;
 }
 
 export function Controls({
     minGirls,
     onMinGirlsChange,
-    onRotate,
-    canRotate,
-    rotationNumber,
-    phase,
     rotationMethod,
     onRotationMethodChange,
     theme,
     onThemeChange,
-    onReset,
-    showReset,
-    lineupNumber,
 }: ControlsProps) {
     const { minGirls: minGirlsBounds } = useSettings();
     return (
         <div className="controls">
-            <div className="control-group">
-                <label className="label-large">Rotate</label>
-                <div className="rotate-input">
-                    <button onClick={() => onRotate('backward')} disabled={!canRotate}>&lt;</button>
-                    <span className="rotate-number">R{rotationNumber}:{phase === 'serve' ? 'S' : 'R'}</span>
-                    <button onClick={() => onRotate('forward')} disabled={!canRotate}>&gt;</button>
-                </div>
-                {rotationNumber > 1 && (
-                    <p className="rotate-subtext">Note: Players can only be configured from R1</p>
-                )}
-            </div>
-
             <div className="control-group">
                 <label className="label-large">Rotation Method</label>
                 <div className="method-toggle">
@@ -79,15 +54,17 @@ export function Controls({
                         <button
                             onClick={() => onMinGirlsChange(Math.max(minGirlsBounds.min, minGirls - 1))}
                             disabled={minGirls <= minGirlsBounds.min}
+                            aria-label="Decrease minimum females"
                         >
-                            −
+                            <Minus size={16} aria-hidden="true" />
                         </button>
                         <span>{minGirls}</span>
                         <button
                             onClick={() => onMinGirlsChange(Math.min(PLAYER_COUNT, minGirls + 1))}
                             disabled={minGirls >= PLAYER_COUNT}
+                            aria-label="Increase minimum females"
                         >
-                            +
+                            <Plus size={16} aria-hidden="true" />
                         </button>
                     </div>
                 </div>
@@ -112,12 +89,6 @@ export function Controls({
                     </button>
                 </div>
             </div>
-
-            {showReset && (
-                <button className="btn-reset" onClick={onReset}>
-                    Reset Lineup {lineupNumber}
-                </button>
-            )}
         </div>
     );
 }

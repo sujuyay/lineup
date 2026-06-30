@@ -23,7 +23,7 @@
 /* Light theme: colour variables are applied inline (per the active palette);
    this just softens the drop shadow, which isn't part of the colour scheme. */
 :root[data-theme='light'] {
-  --shadow: 0 4px 16px rgba(15, 20, 25, 0.12);
+  --shadow: 0 4px 16px rgba(15, 20, 25, 0.2);
 }
 
 /* ===== RESET & BASE ===== */
@@ -54,6 +54,30 @@ body {
 .header {
   text-align: center;
   margin-bottom: 2rem;
+  /* Anchors the settings button to the top-right. */
+  position: relative;
+}
+
+.settings-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .header h1 {
@@ -94,14 +118,6 @@ body {
   font-size: 0.85rem;
   font-family: inherit;
   cursor: pointer;
-}
-
-/* The active tab acting as the share button: shrink the longer label to keep
-   the tab the same size as the numbered ones. */
-.lineup-tab.lineup-tab-share {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.5rem;
 }
 
 .lineup-tab:hover {
@@ -230,7 +246,6 @@ body {
   background: var(--court-bg);
   border-radius: var(--radius);
   position: relative;
-  box-shadow: var(--shadow);
   border: 2px solid var(--court-lines);
   flex: 440 1 0;
   min-width: 0;
@@ -501,6 +516,14 @@ body {
   border-radius: var(--radius);
 }
 
+/* In the settings modal the controls sit on the modal's own panel, so drop the
+   nested panel background/padding. */
+.modal-content .controls {
+  padding: 0;
+  background: transparent;
+  width: 100%;
+}
+
 .control-group {
   display: flex;
   flex-direction: column;
@@ -531,11 +554,10 @@ body {
 
 .number-input button,
 .rotate-input button {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 6px;
-  font-size: 1.2rem;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -571,7 +593,6 @@ body {
   justify-content: space-between;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
-  padding: 0.25rem;
 }
 
 .rotate-number {
@@ -583,17 +604,9 @@ body {
   margin: 0 0.5rem;
 }
 
-.rotate-subtext {
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  line-height: 1.4;
-  text-align: center;
-}
-
 .rotate-input button {
   background: var(--accent-primary);
   color: var(--bg-primary);
-  font-weight: 700;
 }
 
 .rotate-input button:hover:not(:disabled) {
@@ -603,6 +616,96 @@ body {
 .rotate-input button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* ===== ACTION BAR ===== */
+/* Three regions: reset (left), rotation controls (centre), share (right). Large
+   screens: inline, centered, above the controls. On small screens (below) it
+   becomes a floating bar fixed to the bottom-center of the viewport. */
+.action-bar {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  /* Top-align the controls across regions; each action's header sits beneath it. */
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--court-lines);
+  border-radius: var(--radius);
+}
+
+/* A single action: its small header stacked above the control. */
+.action-bar-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  /* Anchors the share button's "Link copied!" confirmation above it. */
+  position: relative;
+}
+
+.action-bar-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.action-bar-side {
+  display: flex;
+  align-items: center;
+}
+
+.action-bar-left {
+  justify-content: flex-start;
+}
+
+.action-bar-right {
+  justify-content: flex-end;
+}
+
+.action-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-bar-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.action-bar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-bar-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* The rotation controls dim when there aren't enough players to rotate. */
+.action-bar-center.disabled {
+  opacity: 0.5;
+}
+
+.action-bar .rotate-input {
+  min-width: 130px;
 }
 
 /* Rotation method toggle */
@@ -639,25 +742,6 @@ body {
   font-size: 0.7rem;
   line-height: 1.4;
   text-align: center;
-}
-
-.btn-reset {
-  margin-top: 0.5rem;
-  padding: 0.6rem 1.25rem;
-  background: transparent;
-  border: 1px solid var(--text-muted);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-reset:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: rgba(231, 76, 60, 0.1);
 }
 
 /* ===== MODAL ===== */
@@ -726,6 +810,9 @@ body {
 
 .form-group {
   margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .form-group label {
@@ -734,7 +821,6 @@ body {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  margin-bottom: 0.5rem;
 }
 
 .form-group input {
@@ -820,6 +906,14 @@ body {
   background: var(--position-color);
   color: white;
   border-color: transparent;
+}
+
+.position-subtext {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 /* Modal Actions */
@@ -927,19 +1021,25 @@ body {
   box-shadow: var(--shadow);
   /* Never intercept pointer/drag events. */
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-/* "Link copied!" confirmation: absolutely positioned just below the Share
-   button, anchored to its relatively-positioned wrapper so it overlays rather
-   than shifting the tab row. */
-.lineup-tab-share-wrap {
-  position: relative;
-  display: inline-flex;
+/* Informational (non-error) message: neutral instead of danger red. */
+.toast.toast-info {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-muted);
 }
 
+/* "Link copied!" confirmation: absolutely positioned, centered just above the
+   share action (anchored to its .action-bar-action), so it overlays rather than
+   shifting the bar. Above (not below) keeps it on-screen when the bar is fixed
+   at the bottom on small screens. */
 .share-copied-toast {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  bottom: calc(100% + 0.5rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 2000;
@@ -967,6 +1067,19 @@ body {
 @media (max-width: 768px) {
   .app {
     padding: 1rem;
+    /* Room for the fixed action bar so it never covers the bottom of content. */
+    padding-bottom: 6rem;
+  }
+
+  /* Small screens: the action bar floats, fixed to the bottom-center. */
+  .action-bar {
+    position: fixed;
+    box-shadow: var(--shadow);
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 500;
+    width: 95%;
   }
 
   .header h1 {
@@ -1071,6 +1184,8 @@ body {
 @media (max-width: 480px) {
   .app {
     padding: 0.75rem;
+    /* Room for the fixed action bar so it never covers the bottom of content. */
+    padding-bottom: 6rem;
   }
 
   .header h1 {
@@ -1197,13 +1312,6 @@ body {
     font-size: 0.85rem;
   }
 
-  .number-input button,
-  .rotate-input button {
-    width: 36px;
-    height: 36px;
-    font-size: 1.1rem;
-  }
-
   .number-input span {
     font-size: 1rem;
     min-width: 2rem;
@@ -1280,6 +1388,8 @@ body {
 @media (max-width: 360px) {
   .app {
     padding: 0.35rem;
+    /* Room for the fixed action bar so it never covers the bottom of content. */
+    padding-bottom: 6rem;
   }
 
   .header h1 {
