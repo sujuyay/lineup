@@ -64,39 +64,31 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // Route analytics events to the consumer-supplied sink (no-op if none).
   const track = onTrack ?? (() => { });
 
-  // Compute the initial state once. A lineup shared via the URL is imported into
-  // the first empty slot; if every slot is in use, it's queued (pendingShare) so
-  // the user can confirm clearing one.
+  // Compute the initial state once. A lineup shared via the URL is shown
+  // read-only (not imported into a slot, and the URL param is left intact).
   const [boot] = useState(() => {
     const stored = loadFromStorage(settings);
     const activeIndex = loadActiveIndex();
     const shared = readSharedLineup();
-    const imported = shared ? enforceMinGirls(expandLineup(shared, settings.minGirls.autoFulfill), settings) : null;
-    if (!imported) return { lineups: stored, activeIndex, pending: null as Lineup | null, autoImported: false };
-
-    const emptyIndex = stored.findIndex(isEmptyLineup);
-    if (emptyIndex >= 0) {
-      return {
-        lineups: stored.map((lineup, i) => (i === emptyIndex ? imported : lineup)),
-        activeIndex: emptyIndex,
-        pending: null as Lineup | null,
-        autoImported: true,
-      };
-    }
-    // No free slot - keep existing data and ask before overwriting one.
-    return { lineups: stored, activeIndex, pending: imported, autoImported: false };
+    const sharedLineup = shared ? enforceMinGirls(expandLineup(shared, settings.minGirls.autoFulfill), settings) : null;
+    return { lineups: stored, activeIndex, sharedLineup };
   });
 
   const [activeLineupIndex, setActiveLineupIndex] = useState(boot.activeIndex);
   const [lineups, setLineups] = useState<Lineup[]>(boot.lineups);
-  const [pendingShare, setPendingShare] = useState<Lineup | null>(boot.pending);
+
+  // A lineup opened from a share URL is displayed read-only instead of the
+  // stored lineups; its presence puts the whole app in view-only mode. Saving it
+  // into a slot clears it (exiting view-only).
+  const [sharedLineup, setSharedLineup] = useState<Lineup | null>(boot.sharedLineup);
+  const viewOnly = sharedLineup !== null;
 
   // Which rotation/phase is currently being viewed and edited.
   const [activeRotation, setActiveRotation] = useState(0);
   const [activePhase, setActivePhase] = useState<Phase>('serve');
 
-  // Get current lineup data
-  const currentLineup = lineups[activeLineupIndex];
+  // Get current lineup data (the shared lineup takes over in view-only mode).
+  const currentLineup = sharedLineup ?? lineups[activeLineupIndex];
   const { minGirls, roster, rotationMethod } = currentLineup;
 
   // Resolve the active rotation to player objects for the UI / drag logic.
@@ -123,7 +115,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // Players can only be added/edited/removed from the first rotation (both
   // methods). For the bench method, swaps are also locked on later rotations -
   // the only allowed action there is a libero replacement.
-  const isModalLocked = activeRotation > 0;
+  const isModalLocked = activeRotation > 0 || viewOnly;
   const isSwapLocked = rotationMethod === 'bench' && activeRotation > 0;
 
   // Transform the active rotation's resolved formation and write it back. Uses a
@@ -154,17 +146,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     setActiveRotation(index);
     setActivePhase(preferredPhase(index));
   };
-
-  // Confirm overwriting the active lineup with a shared one (no slots were free).
-  const handleImportConfirm = () => {
-    if (!pendingShare) return;
-    setLineups((prev) => prev.map((lineup, i) => (i === activeLineupIndex ? pendingShare : lineup)));
-    setPendingShare(null);
-    viewRotation(0);
-    track('shared_lineup_imported', { target: 'replaced' });
-  };
-
-  const handleImportCancel = () => setPendingShare(null);
 
   // Rename the active lineup. An empty title falls back to "Lineup N" on render.
   const setTitle = (title: string) =>
@@ -218,10 +199,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   }, [activeLineupIndex, lineups]);
 
   useEffect(() => {
-    // The shared lineup (read in the initializer) was imported; strip the param so
-    // a refresh doesn't re-import it over later edits.
-    clearShareParam();
-    if (boot.autoImported) track('shared_lineup_imported', { target: 'empty_slot' });
+    // A lineup opened from a share URL is shown read-only; the URL param is left
+    // intact (no import), so a refresh keeps showing it.
+    if (viewOnly) track('shared_lineup_viewed', { title: sharedLineup?.title });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -248,6 +228,34 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  // The slot picked (but not yet confirmed) in the save modal.
+  const [saveTarget, setSaveTarget] = useState<number | null>(null);
+
+  const openSaveModal = () => {
+    setSaveTarget(null);
+    setSaveOpen(true);
+  };
+
+  // View-only: import the shared lineup into the chosen slot, then leave
+  // view-only mode (clearing the share URL param) and show the saved slot.
+  const handleSaveConfirm = () => {
+    if (!sharedLineup || saveTarget === null) return;
+    setLineups((prev) => prev.map((lineup, i) => (i === saveTarget ? sharedLineup : lineup)));
+    setActiveLineupIndex(saveTarget);
+    setSharedLineup(null);
+    setSaveOpen(false);
+    setActiveRotation(0);
+    setActivePhase('serve');
+    clearShareParam();
+    track('shared_lineup_imported', { target: 'saved', title: sharedLineup.title });
+  };
+
+  // View-only: discard the shared lineup and return to the user's own lineups.
+  const handleBack = () => {
+    setSharedLineup(null);
+    clearShareParam();
+  };
   const [shareCopied, setShareCopied] = useState(false);
 
   // Copy a shareable URL (the whole lineup, compressed - incl. the title) to the
@@ -449,7 +457,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     if (!canRotate) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      if (modalOpen || resetModalOpen || pendingShare) return;
+      if (modalOpen || resetModalOpen) return;
       const target = e.target as HTMLElement | null;
       if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
       e.preventDefault();
@@ -457,10 +465,10 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canRotate, modalOpen, resetModalOpen, pendingShare, handleRotate]);
+  }, [canRotate, modalOpen, resetModalOpen, handleRotate]);
 
   // Drag and drop sensors
-  const sensors = useSensors(
+  const dragSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
@@ -473,6 +481,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
       },
     })
   );
+  // View-only mode registers no sensors, so a drag can never start.
+  const noSensors = useSensors();
+  const sensors = viewOnly ? noSensors : dragSensors;
 
   // Track the actively dragged player for overlay
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -671,45 +682,57 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // The message shown in the action bar's toast: the live drag message (why a
   // hovered target is invalid) takes precedence, then the current rotation's
   // validation errors, then an informational note when viewing a later rotation.
-  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' } | null = dragToast
-    ? { messages: dragToast, variant: 'error' }
-    : validation && !validation.valid
-      ? { messages: validation.messages, variant: 'error' }
-      : activeRotation > 0
-        ? { messages: 'Players can only be configured from R1', variant: 'info' }
-        : null;
+  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' } | null = useMemo(() => {
+    if (viewOnly) {
+      return { messages: 'To edit, save as one of your lineups', variant: 'info' };
+    }
+    if (dragToast) {
+      return { messages: dragToast, variant: 'error' };
+    }
+    if (validation && !validation.valid) {
+      return { messages: validation.messages, variant: 'error' };
+    }
+    if (activeRotation > 0) {
+      return { messages: 'Players can only be configured from R1', variant: 'info' };
+    }
+    return null;
+  }, [viewOnly, dragToast, validation, activeRotation]);
 
   return (
     <SettingsContext.Provider value={themedSettings}>
       <div className="app">
         <header className="header">
           <h1><span className="header-emoji">🏐</span> Lineup Simulator</h1>
-          <button
-            className="settings-btn"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Settings"
-          >
-            <Settings size={22} aria-hidden="true" />
-          </button>
+          {!viewOnly && (
+            <button
+              className="settings-btn"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+            >
+              <Settings size={22} aria-hidden="true" />
+            </button>
+          )}
         </header>
 
-        <div className="lineup-tabs">
-          {lineups.map((_, index) => {
-            const isActive = index === activeLineupIndex;
-            return (
-              <button
-                key={index}
-                className={`lineup-tab ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveLineupIndex(index);
-                  viewRotation(0);
-                }}
-              >
-                L{index + 1}
-              </button>
-            );
-          })}
-        </div>
+        {!viewOnly && (
+          <div className="lineup-tabs">
+            {lineups.map((_, index) => {
+              const isActive = index === activeLineupIndex;
+              return (
+                <button
+                  key={index}
+                  className={`lineup-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveLineupIndex(index);
+                    viewRotation(0);
+                  }}
+                >
+                  L{index + 1}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <main className="main">
           <div className="container">
@@ -810,7 +833,10 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               phase={activePhase}
               onReset={handleResetClick}
               onShare={() => setShareOpen(true)}
+              onSave={openSaveModal}
+              onBack={handleBack}
               actionsEnabled={hasPlayers}
+              viewOnly={viewOnly}
               toast={actionBarToast}
             />
           </div>
@@ -832,6 +858,33 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 theme={theme}
                 onThemeChange={setTheme}
               />
+            </div>
+          </div>
+        )}
+
+        {saveOpen && (
+          <div className="modal-overlay" onClick={() => setSaveOpen(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setSaveOpen(false)}>×</button>
+              <h2>Save to Lineup</h2>
+              <p className="confirm-message">Choose a slot. Slots in use will be overwritten.</p>
+              <div className="save-slots">
+                {lineups.map((lineup, index) => (
+                  <button
+                    key={index}
+                    className={`save-slot ${saveTarget === index ? 'selected' : ''}`}
+                    onClick={() => setSaveTarget(index)}
+                  >
+                    <span className="save-slot-name">{lineup.title || `Lineup ${index + 1}`}</span>
+                    <span className="save-slot-status">{isEmptyLineup(lineup) ? 'Empty' : 'In use'}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="confirm-actions">
+                <button className="btn-save" onClick={handleSaveConfirm} disabled={saveTarget === null}>
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -885,25 +938,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               <div className="confirm-actions">
                 <button className="btn-confirm-reset" onClick={handleResetConfirm}>
                   Reset
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Shared-lineup Import Confirmation (no empty slots available) */}
-        {pendingShare && (
-          <div className="modal-overlay" onClick={handleImportCancel}>
-            <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
-              <button className="modal-close" onClick={handleImportCancel}>×</button>
-              <h2>Import shared lineup?</h2>
-              <p className="confirm-message">
-                All lineup slots are in use. Importing will replace Lineup {activeLineupIndex + 1} and clear its
-                current players. This cannot be undone.
-              </p>
-              <div className="confirm-actions">
-                <button className="btn-confirm-reset" onClick={handleImportConfirm}>
-                  Replace Lineup {activeLineupIndex + 1}
                 </button>
               </div>
             </div>

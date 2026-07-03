@@ -979,6 +979,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  text-align: center;
 }
 
 .btn-save:hover:not(:disabled) {
@@ -1033,6 +1034,47 @@ body {
 .confirm-actions {
   display: flex;
   justify-content: center;
+}
+
+/* Save-to-slot list in the view-only save modal. */
+.save-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.save-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-slot:hover {
+  border-color: var(--accent-primary);
+}
+
+.save-slot.selected {
+  border-color: var(--accent-secondary);
+}
+
+.save-slot-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .btn-confirm-reset {
