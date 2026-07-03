@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, Check } from 'lucide-react';
+import { Link } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import type { Player, Lineup, Rotation, Phase, View, SlotRef } from './types';
@@ -259,10 +259,11 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const [shareCopied, setShareCopied] = useState(false);
 
   // Copy a shareable URL (the whole lineup, compressed - incl. the title) to the
-  // clipboard, then flash "Copied!" on the button for a second.
+  // clipboard, close the share modal, then flash a "Link copied!" toast for 1.5s.
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
+      setShareOpen(false);
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 1500);
       track('share_link_copied');
@@ -682,9 +683,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // The message shown in the action bar's toast: the live drag message (why a
   // hovered target is invalid) takes precedence, then the current rotation's
   // validation errors, then an informational note when viewing a later rotation.
-  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' } | null = useMemo(() => {
-    if (viewOnly) {
-      return { messages: 'To edit, save as one of your lineups', variant: 'info' };
+  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' | 'success' } | null = useMemo(() => {
+    if (shareCopied) {
+      return { messages: 'Link copied!', variant: 'success' };
     }
     if (dragToast) {
       return { messages: dragToast, variant: 'error' };
@@ -692,11 +693,14 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     if (validation && !validation.valid) {
       return { messages: validation.messages, variant: 'error' };
     }
+    if (viewOnly) {
+      return { messages: 'To edit, save as one of your lineups', variant: 'info' };
+    }
     if (activeRotation > 0) {
       return { messages: 'Players can only be configured from R1', variant: 'info' };
     }
     return null;
-  }, [viewOnly, dragToast, validation, activeRotation]);
+  }, [shareCopied, viewOnly, dragToast, validation, activeRotation]);
 
   return (
     <SettingsContext.Provider value={themedSettings}>
@@ -906,9 +910,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               </div>
               <div className="confirm-actions">
                 <button className="btn-save" onClick={handleCopyLink} disabled={!currentLineup.title?.trim()}>
-                  {shareCopied ?
-                    <><Check size={16} aria-hidden="true" /><span>Copied!</span></> :
-                    <><Link size={16} aria-hidden="true" /><span>Copy link</span></>}
+                  <Link size={16} aria-hidden="true" /><span>Copy link</span>
                 </button>
               </div>
             </div>

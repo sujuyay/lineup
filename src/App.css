@@ -1067,6 +1067,7 @@ body {
 
 .save-slot.selected {
   border-color: var(--accent-secondary);
+  background-color: var(--bg-primary);
 }
 
 .save-slot-status {
@@ -1117,7 +1118,7 @@ body {
 /* Informational (non-error) message: neutral instead of danger red. */
 .toast.toast-info {
   background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   border: 1px solid var(--text-muted);
 }
 
@@ -1125,6 +1126,13 @@ body {
   background: var(--danger);
   color: white;
   border: 1px solid var(--danger);
+}
+
+/* Positive confirmation (e.g. "Link copied!"). */
+.toast.toast-success {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
 }
 
 /* Larger, more legible toast on bigger screens. */

@@ -17,8 +17,8 @@ interface ActionBarProps {
     actionsEnabled: boolean;
     /** View-only mode: reset is hidden and share is replaced by a save button. */
     viewOnly: boolean;
-    /** Message shown above the bar (validation/drag/info), or null for none. */
-    toast: { messages: string | string[]; variant: 'error' | 'info' } | null;
+    /** Message shown above the bar (validation/drag/info/success), or null. */
+    toast: { messages: string | string[]; variant: 'error' | 'info' | 'success' } | null;
 }
 
 // A bar with three regions: reset (left), the rotation controls (centre), and
