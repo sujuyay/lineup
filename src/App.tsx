@@ -276,7 +276,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
       setShareOpen(false);
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 1500);
-      track('share_link_copied');
+      track('share_link_copied', { title: currentLineup.title ?? '' });
     } catch {
       // Clipboard unavailable (e.g. denied permissions) - nothing to do.
     }
