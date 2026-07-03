@@ -237,6 +237,16 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     setSaveOpen(true);
   };
 
+  // Apply the settings-modal drafts, only touching what actually changed (so we
+  // don't fire spurious analytics or re-derive rotations needlessly), then close.
+  const handleSettingsSave = (values: { title: string; minGirls: number; rotationMethod: 'bench' | 'substitutions'; theme: Theme }) => {
+    if (values.title !== (currentLineup.title ?? '')) setTitle(values.title);
+    if (values.minGirls !== minGirls) setMinGirls(values.minGirls);
+    if (values.rotationMethod !== rotationMethod) setRotationMethod(values.rotationMethod);
+    if (values.theme !== theme) setTheme(values.theme);
+    setSettingsOpen(false);
+  };
+
   // View-only: import the shared lineup into the chosen slot, then leave
   // view-only mode (clearing the share URL param) and show the saved slot.
   const handleSaveConfirm = () => {
@@ -854,13 +864,10 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               <Controls
                 title={currentLineup.title ?? ''}
                 titlePlaceholder={`Lineup ${activeLineupIndex + 1}`}
-                onTitleChange={setTitle}
                 minGirls={minGirls}
-                onMinGirlsChange={setMinGirls}
                 rotationMethod={rotationMethod}
-                onRotationMethodChange={setRotationMethod}
                 theme={theme}
-                onThemeChange={setTheme}
+                onSave={handleSettingsSave}
               />
             </div>
           </div>
