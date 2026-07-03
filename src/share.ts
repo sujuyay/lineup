@@ -25,6 +25,7 @@ type RotationPair = { serve: Rotation; receive: Rotation };
 // rotations are kept explicit. Keeping only the non-derivable rotations is the
 // biggest size win, since most lineups have none.
 export interface ShareLineup {
+  title?: string;
   minGirls: number;
   rotationMethod: 'bench' | 'substitutions';
   roster: Record<string, Player>;
@@ -46,6 +47,7 @@ type CompactLineup = [
   number, // 1 = substitutions, 0 = bench
   Array<[string, number, number]>, // players: [name, positionCode, genderCode]
   CompactRotation[],
+  string?, // title (added later; absent in older links)
 ];
 
 export function encodeLineup(lineup: ShareLineup): string {
@@ -79,6 +81,7 @@ export function encodeLineup(lineup: ShareLineup): string {
     lineup.rotationMethod === 'substitutions' ? 1 : 0,
     players,
     rotations,
+    lineup.title ?? '',
   ];
 
   return LZString.compressToEncodedURIComponent(JSON.stringify(compact));
@@ -89,9 +92,11 @@ export function decodeLineup(encoded: string): ShareLineup | null {
     const json = LZString.decompressFromEncodedURIComponent(encoded);
     if (!json) return null;
     const data = JSON.parse(json) as CompactLineup;
-    if (!Array.isArray(data) || data.length !== 5) return null;
+    // Length >= 5 so older links (no trailing title) still decode.
+    if (!Array.isArray(data) || data.length < 5) return null;
     const [version, minGirls, methodCode, players, rot] = data;
     if (version !== SHARE_VERSION || !Array.isArray(players) || !Array.isArray(rot)) return null;
+    const title = typeof data[5] === 'string' && data[5] ? data[5] : undefined;
 
     // Player ids are internal, so regenerate stable ones from the index.
     const ids = players.map((_, i) => `p${i}`);
@@ -120,7 +125,7 @@ export function decodeLineup(encoded: string): ShareLineup | null {
       return { serve: formation(r[0]), receive: receive ? formation(receive) : formation(r[0]) };
     });
 
-    return { minGirls, rotationMethod: methodCode === 1 ? 'substitutions' : 'bench', roster, rotations };
+    return { title, minGirls, rotationMethod: methodCode === 1 ? 'substitutions' : 'bench', roster, rotations };
   } catch {
     return null;
   }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, Check } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
 import type { Player, Lineup, Rotation, Phase, View, SlotRef } from './types';
@@ -29,7 +30,6 @@ import { Court } from './components/Court';
 import { Bench } from './components/Bench';
 import { buildShareUrl, readSharedLineup, clearShareParam } from './share';
 import { RotationTracker } from './components/RotationTracker';
-import { Toast } from './components/Toast';
 import { Controls } from './components/Controls';
 import { ActionBar } from './components/ActionBar';
 import { AddPlayerModal } from './components/AddPlayerModal';
@@ -166,6 +166,12 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
   const handleImportCancel = () => setPendingShare(null);
 
+  // Rename the active lineup. An empty title falls back to "Lineup N" on render.
+  const setTitle = (title: string) =>
+    setLineups(prev => prev.map((lineup, i) =>
+      i === activeLineupIndex ? { ...lineup, title } : lineup
+    ));
+
   // minGirls affects how rotate-forward blocks female exits, so re-derive the
   // whole cascade from the base rotation.
   const setMinGirls = (min: number) =>
@@ -241,14 +247,16 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
-  // Copy a shareable URL (the whole lineup, compressed) to the clipboard.
-  const handleShare = async () => {
+  // Copy a shareable URL (the whole lineup, compressed - incl. the title) to the
+  // clipboard, then flash "Copied!" on the button for a second.
+  const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
       setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 1000);
+      setTimeout(() => setShareCopied(false), 1500);
       track('share_link_copied');
     } catch {
       // Clipboard unavailable (e.g. denied permissions) - nothing to do.
@@ -660,6 +668,17 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     );
   };
 
+  // The message shown in the action bar's toast: the live drag message (why a
+  // hovered target is invalid) takes precedence, then the current rotation's
+  // validation errors, then an informational note when viewing a later rotation.
+  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' } | null = dragToast
+    ? { messages: dragToast, variant: 'error' }
+    : validation && !validation.valid
+      ? { messages: validation.messages, variant: 'error' }
+      : activeRotation > 0
+        ? { messages: 'Players can only be configured from R1', variant: 'info' }
+        : null;
+
   return (
     <SettingsContext.Provider value={themedSettings}>
       <div className="app">
@@ -694,6 +713,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
         <main className="main">
           <div className="container">
+            <h2 className="lineup-title">{currentLineup.title || `Lineup ${activeLineupIndex + 1}`}</h2>
             <RotationTracker
               count={rotationCount}
               activeIndex={activeRotation}
@@ -783,26 +803,15 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 {activeId ? renderDragOverlay() : null}
               </DragOverlay>
             </DndContext>
-            {/* Inline toast: the live drag message (why a hovered target is
-                invalid) takes precedence, then the current rotation's validation
-                errors, then an informational note when viewing a later rotation
-                (players can only be configured from R1). */}
-            {dragToast ? (
-              <Toast messages={dragToast} variant="error" />
-            ) : validation && !validation.valid ? (
-              <Toast messages={validation.messages} variant="error" />
-            ) : activeRotation > 0 ? (
-              <Toast messages="Players can only be configured from R1" variant="info" />
-            ) : null}
             <ActionBar
               onRotate={handleRotate}
               canRotate={canRotate}
               rotationNumber={activeRotation + 1}
               phase={activePhase}
               onReset={handleResetClick}
-              onShare={handleShare}
-              shareCopied={shareCopied}
+              onShare={() => setShareOpen(true)}
               actionsEnabled={hasPlayers}
+              toast={actionBarToast}
             />
           </div>
         </main>
@@ -813,6 +822,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               <button className="modal-close" onClick={() => setSettingsOpen(false)}>×</button>
               <h2>Settings</h2>
               <Controls
+                title={currentLineup.title ?? ''}
+                titlePlaceholder={`Lineup ${activeLineupIndex + 1}`}
+                onTitleChange={setTitle}
                 minGirls={minGirls}
                 onMinGirlsChange={setMinGirls}
                 rotationMethod={rotationMethod}
@@ -820,6 +832,32 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 theme={theme}
                 onThemeChange={setTheme}
               />
+            </div>
+          </div>
+        )}
+
+        {shareOpen && (
+          <div className="modal-overlay" onClick={() => setShareOpen(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setShareOpen(false)}>×</button>
+              <h2>Share Lineup</h2>
+              <div className="form-group">
+                <label>Lineup Name</label>
+                <input
+                  type="text"
+                  value={currentLineup.title ?? ''}
+                  placeholder={`Lineup ${activeLineupIndex + 1}`}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={40}
+                />
+              </div>
+              <div className="confirm-actions">
+                <button className="btn-save" onClick={handleCopyLink} disabled={!currentLineup.title?.trim()}>
+                  {shareCopied ?
+                    <><Check size={16} aria-hidden="true" /><span>Copied!</span></> :
+                    <><Link size={16} aria-hidden="true" /><span>Copy link</span></>}
+                </button>
+              </div>
             </div>
           </div>
         )}

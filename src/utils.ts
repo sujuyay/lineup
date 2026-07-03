@@ -638,6 +638,7 @@ export function sameRotation(a: RotationPair, b: RotationPair): boolean {
 export function minimizeLineup(lineup: Lineup, autoFulfill: boolean): ShareLineup {
   const derived = deriveAllFromFirst(lineup, autoFulfill);
   return {
+    title: lineup.title,
     minGirls: lineup.minGirls,
     rotationMethod: lineup.rotationMethod,
     roster: lineup.roster,
@@ -652,6 +653,7 @@ export function minimizeLineup(lineup: Lineup, autoFulfill: boolean): ShareLineu
 export function expandLineup(share: ShareLineup, autoFulfill: boolean): Lineup {
   const first = share.rotations[0];
   const base: Lineup = {
+    title: share.title,
     minGirls: share.minGirls,
     rotationMethod: share.rotationMethod,
     roster: share.roster,

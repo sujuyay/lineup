@@ -57,6 +57,8 @@ export type Rotation = {
 };
 
 export interface Lineup {
+    /** Display name shown above the rotation tracker; falls back to "Lineup N". */
+    title?: string;
     minGirls: number;
     rotationMethod: 'bench' | 'substitutions';
     roster: Record<string, Player>;

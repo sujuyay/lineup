@@ -3,6 +3,9 @@ import { useSettings, PLAYER_COUNT } from '../config';
 import type { Theme } from '../config';
 
 interface ControlsProps {
+    title: string;
+    titlePlaceholder: string;
+    onTitleChange: (title: string) => void;
     minGirls: number;
     onMinGirlsChange: (min: number) => void;
     rotationMethod: 'bench' | 'substitutions';
@@ -12,6 +15,9 @@ interface ControlsProps {
 }
 
 export function Controls({
+    title,
+    titlePlaceholder,
+    onTitleChange,
     minGirls,
     onMinGirlsChange,
     rotationMethod,
@@ -22,6 +28,18 @@ export function Controls({
     const { minGirls: minGirlsBounds } = useSettings();
     return (
         <div className="controls">
+            <div className="control-group">
+                <label className="label-large">Lineup Name</label>
+                <input
+                    type="text"
+                    className="title-input"
+                    value={title}
+                    placeholder={titlePlaceholder}
+                    onChange={(e) => onTitleChange(e.target.value)}
+                    maxLength={40}
+                />
+            </div>
+
             <div className="control-group">
                 <label className="label-large">Rotation Method</label>
                 <div className="method-toggle">
