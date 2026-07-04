@@ -251,6 +251,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // view-only mode (clearing the share URL param) and show the saved slot.
   const handleSaveConfirm = () => {
     if (!sharedLineup || saveTarget === null) return;
+    // Track first, before clearShareParam()'s history.replaceState (which Umami
+    // hooks to auto-fire a pageview) can clobber this event's properties.
+    track('shared_lineup_imported', { target: 'saved', title: sharedLineup.title });
     setLineups((prev) => prev.map((lineup, i) => (i === saveTarget ? sharedLineup : lineup)));
     setActiveLineupIndex(saveTarget);
     setSharedLineup(null);
@@ -258,7 +261,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     setActiveRotation(0);
     setActivePhase('serve');
     clearShareParam();
-    track('shared_lineup_imported', { target: 'saved', title: sharedLineup.title });
   };
 
   // View-only: discard the shared lineup and return to the user's own lineups.
@@ -273,10 +275,10 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(buildShareUrl(minimizeLineup(currentLineup, settings.minGirls.autoFulfill)));
+      track('share_link_copied', { title: currentLineup.title ?? '' });
       setShareOpen(false);
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 1500);
-      track('share_link_copied', { title: currentLineup.title ?? '' });
     } catch {
       // Clipboard unavailable (e.g. denied permissions) - nothing to do.
     }
