@@ -374,7 +374,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     // lineup counts as creating a lineup.
     if (!currentPlayer) {
       if (isEmptyLineup(currentLineup)) track('lineup_created');
-      track('player_added', { position: playerData.position ?? 'none' });
+      track('player_added', { name: playerData.name, position: playerData.position ?? 'none' });
     }
 
     const appendOrReplace = (prev: Player[]) =>
