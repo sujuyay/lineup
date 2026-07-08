@@ -732,6 +732,43 @@ body {
   cursor: not-allowed;
 }
 
+/* Popover menu opened by the Menu button, floating above it. */
+.action-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: -1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  padding: 0.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.action-menu button {
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &.reset-btn {
+    color: var(--danger);
+  }
+}
+
+.action-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
 .action-bar-center {
   display: flex;
   flex-direction: column;

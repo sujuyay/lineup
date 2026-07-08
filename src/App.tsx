@@ -229,10 +229,21 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
+  // Whether the save modal is importing a shared lineup or cloning the current one.
+  const [saveMode, setSaveMode] = useState<'import' | 'clone'>('import');
   // The slot picked (but not yet confirmed) in the save modal.
   const [saveTarget, setSaveTarget] = useState<number | null>(null);
 
+  // View-only: pick a slot to import the shared lineup into.
   const openSaveModal = () => {
+    setSaveMode('import');
+    setSaveTarget(null);
+    setSaveOpen(true);
+  };
+
+  // Menu > Clone: pick a slot to copy the current lineup into.
+  const openCloneModal = () => {
+    setSaveMode('clone');
     setSaveTarget(null);
     setSaveOpen(true);
   };
@@ -247,20 +258,30 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     setSettingsOpen(false);
   };
 
-  // View-only: import the shared lineup into the chosen slot, then leave
-  // view-only mode (clearing the share URL param) and show the saved slot.
+  // Save-modal confirm. 'import' brings the shared lineup into the chosen slot
+  // and leaves view-only; 'clone' copies the current lineup into the chosen slot
+  // as "Copy of <title>".
   const handleSaveConfirm = () => {
-    if (!sharedLineup || saveTarget === null) return;
-    // Track first, before clearShareParam()'s history.replaceState (which Umami
-    // hooks to auto-fire a pageview) can clobber this event's properties.
-    track('shared_lineup_imported', { target: 'saved', title: sharedLineup.title });
-    setLineups((prev) => prev.map((lineup, i) => (i === saveTarget ? sharedLineup : lineup)));
+    if (saveTarget === null) return;
+    if (saveMode === 'import') {
+      if (!sharedLineup) return;
+      // Track first, before clearShareParam()'s history.replaceState (which Umami
+      // hooks to auto-fire a pageview) can clobber this event's properties.
+      track('shared_lineup_imported', { target: 'saved', title: sharedLineup.title });
+      setLineups((prev) => prev.map((lineup, i) => (i === saveTarget ? sharedLineup : lineup)));
+      setSharedLineup(null);
+      clearShareParam();
+    } else {
+      const currentTitle = currentLineup.title || `Lineup ${activeLineupIndex + 1}`;
+      const cloneTitle = `Copy of ${currentTitle}`;
+      const clone: Lineup = { ...structuredClone(currentLineup), title: cloneTitle };
+      track('lineup_cloned', { title: currentTitle });
+      setLineups((prev) => prev.map((lineup, i) => (i === saveTarget ? clone : lineup)));
+    }
     setActiveLineupIndex(saveTarget);
-    setSharedLineup(null);
     setSaveOpen(false);
     setActiveRotation(0);
     setActivePhase('serve');
-    clearShareParam();
   };
 
   // View-only: discard the shared lineup and return to the user's own lineups.
@@ -752,7 +773,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
         <main className="main">
           <div className="container">
-            <h2 className="lineup-title">{currentLineup.title || `Lineup ${activeLineupIndex + 1}`}</h2>
+            <h2 className="lineup-title">{viewOnly ? '👀 ' : ''}{currentLineup.title || `Lineup ${activeLineupIndex + 1}`}</h2>
             <RotationTracker
               count={rotationCount}
               activeIndex={activeRotation}
@@ -848,6 +869,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               rotationNumber={activeRotation + 1}
               phase={activePhase}
               onReset={handleResetClick}
+              onClone={openCloneModal}
               onShare={() => setShareOpen(true)}
               onSave={openSaveModal}
               onBack={handleBack}
@@ -879,18 +901,21 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
           <div className="modal-overlay" onClick={() => setSaveOpen(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <button className="modal-close" onClick={() => setSaveOpen(false)}>×</button>
-              <h2>Save to Lineup</h2>
+              <h2>{saveMode === 'clone' ? 'Clone Lineup' : 'Save Lineup'}</h2>
               <p className="confirm-message">Choose a slot. Slots in use will be overwritten.</p>
               <div className="save-slots">
                 {lineups.map((lineup, index) => (
-                  <button
-                    key={index}
-                    className={`save-slot ${saveTarget === index ? 'selected' : ''}`}
-                    onClick={() => setSaveTarget(index)}
-                  >
-                    <span className="save-slot-name">{lineup.title || `Lineup ${index + 1}`}</span>
-                    <span className="save-slot-status">{isEmptyLineup(lineup) ? 'Empty' : 'In use'}</span>
-                  </button>
+                  // When cloning, omit the current lineup (it's the source).
+                  saveMode === 'clone' && index === activeLineupIndex ? null : (
+                    <button
+                      key={index}
+                      className={`save-slot ${saveTarget === index ? 'selected' : ''}`}
+                      onClick={() => setSaveTarget(index)}
+                    >
+                      <span className="save-slot-name">L{index + 1}: {lineup.title || `Lineup ${index + 1}`}</span>
+                      <span className="save-slot-status">{isEmptyLineup(lineup) ? 'Empty' : 'In use'}</span>
+                    </button>
+                  )
                 ))}
               </div>
               <div className="confirm-actions">
