@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Menu, Forward, Download, ArrowLeft } from 'lucide-react';
 import { Toast } from './Toast';
 
@@ -20,7 +21,7 @@ interface ActionBarProps {
     /** View-only mode: the menu is replaced by Back, and share by save. */
     viewOnly: boolean;
     /** Message shown above the bar (validation/drag/info/success), or null. */
-    toast: { messages: string | string[]; variant: 'error' | 'info' | 'success' } | null;
+    toast: { messages: ReactNode | ReactNode[]; variant: 'error' | 'info' | 'success' } | null;
 }
 
 // A bar with three regions: menu (left), the rotation controls (centre), and

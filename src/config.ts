@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
 import type { Lineup, Phase, Position } from './types';
 import { POSITION_COLORS } from './types';
 
@@ -134,6 +135,15 @@ export interface LineupSettings {
   colors: ColorScheme;
   /** Theme used on first load (before the user toggles / a stored preference exists). */
   defaultTheme: Theme;
+  /**
+   * Optional message shown as an info toast above the action bar. It's a
+   * fallback: any real toast (a validation error, drag warning, "Link
+   * copied!", the view-only/later-rotation notes) always takes priority and
+   * replaces it. Use it to surface persistent context (e.g. league-specific
+   * rules) that should be visible whenever nothing more urgent is showing.
+   * Accepts JSX (e.g. a message containing a link), not just plain text.
+   */
+  defaultMessage: ReactNode;
 }
 
 export const DEFAULT_SETTINGS: LineupSettings = {
@@ -144,14 +154,24 @@ export const DEFAULT_SETTINGS: LineupSettings = {
   validators: { bench: [], substitutions: [] },
   colors: DEFAULT_COLORS,
   defaultTheme: 'dark',
+  defaultMessage: null,
 };
 
 /**
  * A recursively optional version of `T` — used for partial overrides. Arrays
- * (e.g. validator lists) are taken whole rather than being made partial.
+ * (e.g. validator lists) are taken whole rather than being made partial, as is
+ * anything React-element-like (e.g. a JSX `defaultMessage`) - it has a `props`
+ * field, so without this it would get recursed into and its required props
+ * would incorrectly become optional.
  */
 export type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K];
+  [K in keyof T]?: T[K] extends readonly unknown[]
+  ? T[K]
+  : T[K] extends { props: unknown }
+  ? T[K]
+  : T[K] extends object
+  ? DeepPartial<T[K]>
+  : T[K];
 };
 
 /** Merge user-supplied overrides onto {@link DEFAULT_SETTINGS}. */
@@ -173,6 +193,7 @@ export function resolveSettings(
         positionBackgrounds: { ...DEFAULT_SETTINGS.colors.positionBackgrounds, ...overrides.colors?.positionBackgrounds },
       },
       defaultTheme: overrides.defaultTheme ?? DEFAULT_SETTINGS.defaultTheme,
+      defaultMessage: overrides.defaultMessage ?? DEFAULT_SETTINGS.defaultMessage,
     };
   validateSettings(settings);
   return settings;

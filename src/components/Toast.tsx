@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { Info, CircleAlert, CircleCheck } from 'lucide-react';
 interface ToastProps {
-    /** One or more lines to show. Empty/absent renders nothing. */
-    messages: string | string[];
+    /** One or more lines to show (plain text or JSX, e.g. a message with a link). Empty/absent renders nothing. */
+    messages: ReactNode | ReactNode[];
     /** Visual style: 'error' (default, danger pill), 'info' (neutral), or 'success'. */
     variant?: 'error' | 'info' | 'success';
 }

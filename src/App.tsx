@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
@@ -131,7 +132,9 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // One tracker step per stored rotation (which is derived from court + both
   // side benches). Hidden until the lineup has players.
   const rotationCount = Object.keys(roster).length > 0 ? currentLineup.rotations.length : 0;
-  const canRotate = rotationCount >= 6;
+  // Rotating only makes sense once a full six-player court is actually fielded -
+  // rotationCount alone can reach 6 with players still sitting on the bench.
+  const canRotate = rotationCount >= 6 && court.every((p) => p !== null);
 
   // Pick which phase to show when navigating to a rotation: prefer the invalid
   // phase so problems are visible. Default to serve (incl. when both are invalid
@@ -716,7 +719,7 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
   // The message shown in the action bar's toast: the live drag message (why a
   // hovered target is invalid) takes precedence, then the current rotation's
   // validation errors, then an informational note when viewing a later rotation.
-  const actionBarToast: { messages: string | string[]; variant: 'error' | 'info' | 'success' } | null = useMemo(() => {
+  const actionBarToast: { messages: ReactNode | ReactNode[]; variant: 'error' | 'info' | 'success' } | null = useMemo(() => {
     if (shareCopied) {
       return { messages: 'Link copied!', variant: 'success' };
     }
@@ -732,8 +735,11 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
     if (activeRotation > 0) {
       return { messages: 'Players can only be configured from R1', variant: 'info' };
     }
+    if (settings.defaultMessage) {
+      return { messages: settings.defaultMessage, variant: 'info' };
+    }
     return null;
-  }, [shareCopied, viewOnly, dragToast, validation, activeRotation]);
+  }, [shareCopied, viewOnly, dragToast, validation, activeRotation, settings.defaultMessage]);
 
   return (
     <SettingsContext.Provider value={themedSettings}>
