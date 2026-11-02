@@ -32,6 +32,7 @@ import { Bench } from './components/Bench';
 import { buildShareUrl, readSharedLineup, clearShareParam } from './share';
 import { RotationTracker } from './components/RotationTracker';
 import { Controls } from './components/Controls';
+import { LineupOptions } from './components/LineupOptions';
 import { ActionBar } from './components/ActionBar';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import { Settings } from 'lucide-react';
@@ -253,10 +254,8 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
 
   // Apply the settings-modal drafts, only touching what actually changed (so we
   // don't fire spurious analytics or re-derive rotations needlessly), then close.
-  const handleSettingsSave = (values: { title: string; minGirls: number; rotationMethod: 'bench' | 'substitutions'; theme: Theme }) => {
+  const handleSettingsSave = (values: { title: string; theme: Theme }) => {
     if (values.title !== (currentLineup.title ?? '')) setTitle(values.title);
-    if (values.minGirls !== minGirls) setMinGirls(values.minGirls);
-    if (values.rotationMethod !== rotationMethod) setRotationMethod(values.rotationMethod);
     if (values.theme !== theme) setTheme(values.theme);
     setSettingsOpen(false);
   };
@@ -869,6 +868,14 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
                 {activeId ? renderDragOverlay() : null}
               </DragOverlay>
             </DndContext>
+            {!viewOnly && (
+              <LineupOptions
+                minGirls={minGirls}
+                rotationMethod={rotationMethod}
+                onMinGirlsChange={setMinGirls}
+                onRotationMethodChange={setRotationMethod}
+              />
+            )}
             <ActionBar
               onRotate={handleRotate}
               canRotate={canRotate}
@@ -894,8 +901,6 @@ function App({ settings: settingsOverride, onTrack }: AppProps = {}) {
               <Controls
                 title={currentLineup.title ?? ''}
                 titlePlaceholder={`Lineup ${activeLineupIndex + 1}`}
-                minGirls={minGirls}
-                rotationMethod={rotationMethod}
                 theme={theme}
                 onSave={handleSettingsSave}
               />

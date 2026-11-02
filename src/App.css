@@ -821,6 +821,66 @@ body {
   text-align: center;
 }
 
+/* ===== LINEUP OPTIONS ===== */
+/* Compact panel under the court: rotation method + min females in one row, with
+   the method description beneath. */
+.lineup-options {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--bg-tertiary);
+}
+
+.lineup-options-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.lineup-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.lineup-option-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lineup-options .method-option {
+  padding: 0 0.6rem;
+  height: 26px;
+  font-size: 0.7rem;
+}
+
+.lineup-options .number-input {
+  padding: 0.15rem;
+  gap: 0.2rem;
+}
+
+.lineup-options .number-input button {
+  width: 22px;
+  height: 22px;
+}
+
+.lineup-options .number-input span {
+  min-width: 1.5rem;
+  font-size: 0.85rem;
+}
+
 /* ===== MODAL ===== */
 .modal-overlay {
   position: fixed;
@@ -1408,6 +1468,10 @@ body {
   .sub-bench {
     padding: 0.4rem;
     gap: 0.4rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .lineup-options {
     border-radius: var(--radius-sm);
   }
 
